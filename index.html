@@ -3171,6 +3171,10 @@ let adminDismissedDuplicates = new Set();
 let editDataType = 'persons';
 let selectedProfileType = null;
 let profileTypePendingDeleteId = null;
+let familyAdminPendingDeleteId = null;
+let currentUserRole = null;
+let currentUserName = '';
+let currentUserBranchIds = [];
 const pickerState = {
   event: { selected: [], query: '' },
   story: { selected: [], query: '' }
@@ -3214,16 +3218,36 @@ function showPage(name) {
 // NOT SECURE: this site is entirely static, so the password and all gate
 // logic are visible in the public source. This only discourages casual
 // visitors; it does not protect private data or replace real authentication.
-function isAdminSessionUnlocked() {
-  try {
-    return sessionStorage.getItem('familyLegacyAdminUnlocked') === 'true';
-  } catch (error) {
-    return false;
+function simplePasswordHash(value) {
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
   }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function restoreAdminSession() {
+  try {
+    const session = JSON.parse(sessionStorage.getItem('familyLegacyAdminSession') || 'null');
+    currentUserRole = session?.role || null;
+    currentUserName = session?.name || '';
+    currentUserBranchIds = Array.isArray(session?.branch_ids) ? session.branch_ids : [];
+  } catch (error) {
+    currentUserRole = null;
+    currentUserName = '';
+    currentUserBranchIds = [];
+  }
+  return Boolean(currentUserRole);
 }
 
 function renderProtectedPage(name) {
-  if (isAdminSessionUnlocked()) {
+  if (restoreAdminSession()) {
+    if (name === 'edit-data' && currentUserRole !== 'super_admin') {
+      const root = document.getElementById('edit-data-root');
+      root.innerHTML = `<div class="inline-message error">The full data editor is available to the Super Admin only. <button class="profile-change-link" type="button" onclick="showPage('admin')">Return to Admin</button></div>`;
+      return;
+    }
     if (name === 'admin') renderAdmin();
     if (name === 'edit-data') renderEditData();
     return;
@@ -3234,7 +3258,7 @@ function renderProtectedPage(name) {
   root.innerHTML = `
     <div class="admin-card password-gate">
       <div class="mini-section-title">Family Admin Access</div>
-      <p class="page-intro" style="margin-bottom:18px;">Enter the family admin password to continue for this browser session.</p>
+      <p class="page-intro" style="margin-bottom:18px;">Enter a Super Admin or Family Admin password to continue.</p>
       <form onsubmit="unlockProtectedPage(event, '${name}')">
         <div class="form-field">
           <label class="form-label" for="${name}-password">Password</label>
@@ -3252,18 +3276,64 @@ function unlockProtectedPage(event, name) {
   const input = document.getElementById(`${name}-password`);
   const message = document.getElementById(`${name}-gate-message`);
   if (!input) return;
-  if (input.value !== D.settings.admin_password) {
+  const passwordHash = simplePasswordHash(input.value);
+  let session = null;
+  if (passwordHash === D.settings.admin_password_hash) {
+    session = { role: 'super_admin', name: 'Super Admin', branch_ids: [] };
+  } else {
+    const familyAdmin = (D.settings.family_admins || []).find(admin => admin.password_hash === passwordHash);
+    if (familyAdmin) session = { role: 'family_admin', name: familyAdmin.name, branch_ids: familyAdmin.branch_ids || [] };
+  }
+  if (!session) {
     if (message) message.innerHTML = '<div class="inline-message error">That password did not match.</div>';
     input.select();
     return;
   }
   try {
-    sessionStorage.setItem('familyLegacyAdminUnlocked', 'true');
+    sessionStorage.setItem('familyLegacyAdminSession', JSON.stringify(session));
   } catch (error) {
     // The page can still unlock if storage is unavailable.
   }
+  currentUserRole = session.role;
+  currentUserName = session.name;
+  currentUserBranchIds = session.branch_ids;
   if (name === 'admin') renderAdmin();
   if (name === 'edit-data') renderEditData();
+}
+
+function logoutAdmin() {
+  try { sessionStorage.removeItem('familyLegacyAdminSession'); } catch (error) {}
+  currentUserRole = null;
+  currentUserName = '';
+  currentUserBranchIds = [];
+  adminTab = 'overview';
+  renderProtectedPage(currentPage === 'edit-data' ? 'edit-data' : 'admin');
+}
+
+function recordInAdminScope(record) {
+  if (currentUserRole === 'super_admin') return true;
+  return (record.branch_ids || []).some(id => currentUserBranchIds.includes(id));
+}
+
+function scopedRecords(type) {
+  if (currentUserRole === 'super_admin') return D[type] || [];
+  return (D[type] || []).filter(recordInAdminScope);
+}
+
+function getScopedDataset() {
+  if (currentUserRole === 'super_admin') return D;
+  const persons = scopedRecords('persons');
+  const personIds = new Set(persons.map(person => person.id));
+  return {
+    ...D,
+    branches: D.branches.filter(branch => currentUserBranchIds.includes(branch.id)),
+    persons,
+    events: scopedRecords('events'),
+    stories: scopedRecords('stories'),
+    media: D.media.filter(media => (media.people_ids || []).some(id => personIds.has(id))),
+    locations: D.locations,
+    sources: D.sources
+  };
 }
 
 // Fix nav button matching
@@ -4176,7 +4246,8 @@ function submitPersonForm(event) {
     confidence: 0.35,
     sources: submittedBy ? [`Submitted by ${submittedBy}`] : [],
     privacy: 'family',
-    submitted_by: submittedBy
+    submitted_by: submittedBy,
+    status: 'submitted'
   };
 
   D.persons.push(person);
@@ -4254,7 +4325,8 @@ function submitEventForm(event) {
     tags: [type, submittedBy ? `submitted-by:${submittedBy}` : null].filter(Boolean),
     sources: submittedBy ? [`Submitted by ${submittedBy}`] : [],
     submitted_by: submittedBy,
-    privacy: 'family'
+    privacy: 'family',
+    status: 'submitted'
   };
 
   D.events.push(createdEvent);
@@ -4770,42 +4842,52 @@ function renderAdmin() {
   if (!root) return;
 
   root.innerHTML = `
+    <div class="admin-warning" style="display:flex;justify-content:space-between;gap:16px;align-items:center;">
+      <span>Logged in as ${escapeHtml(currentUserName || 'Admin')} (${currentUserRole === 'super_admin' ? 'Super Admin' : 'Family Admin'})${currentUserRole === 'family_admin' ? ` — ${escapeHtml(D.branches.filter(branch => currentUserBranchIds.includes(branch.id)).map(branch => branch.name).join(', ') || 'No branches assigned')}` : ''}</span>
+      <button class="profile-change-link" type="button" onclick="logoutAdmin()">Log out</button>
+    </div>
     <div class="admin-tabs">
       <button class="filter-pill ${adminTab === 'overview' ? 'active' : ''}" onclick="setAdminTab('overview')">Data Overview</button>
       <button class="filter-pill ${adminTab === 'editor' ? 'active' : ''}" onclick="setAdminTab('editor')">Edit Records</button>
-      <button class="filter-pill ${adminTab === 'profile-types' ? 'active' : ''}" onclick="setAdminTab('profile-types')">Profile Types</button>
+      ${currentUserRole === 'super_admin' ? `<button class="filter-pill ${adminTab === 'profile-types' ? 'active' : ''}" onclick="setAdminTab('profile-types')">Profile Types</button>` : ''}
+      ${currentUserRole === 'super_admin' ? `<button class="filter-pill ${adminTab === 'family-admins' ? 'active' : ''}" onclick="setAdminTab('family-admins')">Family Admins</button>` : ''}
+      <button class="filter-pill ${adminTab === 'pending' ? 'active' : ''}" onclick="setAdminTab('pending')">Pending Submissions</button>
       <button class="filter-pill ${adminTab === 'export' ? 'active' : ''}" onclick="setAdminTab('export')">Export</button>
       <button class="filter-pill ${adminTab === 'duplicates' ? 'active' : ''}" onclick="setAdminTab('duplicates')">Duplicate Detector</button>
-      <button class="filter-pill" onclick="showPage('edit-data')">Full Data Editor</button>
+      ${currentUserRole === 'super_admin' ? `<button class="filter-pill" onclick="showPage('edit-data')">Full Data Editor</button>` : ''}
     </div>
     ${adminTab === 'overview' ? renderAdminOverview() : ''}
     ${adminTab === 'editor' ? renderAdminEditor() : ''}
     ${adminTab === 'profile-types' ? renderAdminProfileTypes() : ''}
+    ${adminTab === 'family-admins' ? renderFamilyAdmins() : ''}
+    ${adminTab === 'pending' ? renderPendingSubmissions() : ''}
     ${adminTab === 'export' ? renderAdminExport() : ''}
     ${adminTab === 'duplicates' ? renderAdminDuplicates() : ''}
   `;
 }
 
 function setAdminTab(tab) {
+  if (currentUserRole !== 'super_admin' && ['profile-types','family-admins'].includes(tab)) tab = 'overview';
   adminTab = tab;
   renderAdmin();
 }
 
 function renderAdminOverview() {
-  const totalPersons = D.persons.length || 1;
-  const totalEvents = D.events.length || 1;
-  const byBranch = D.branches.map(branch => ({ branch, count: D.persons.filter(person => (person.branch_ids || []).includes(branch.id)).length }));
-  const eventCounts = Object.entries(D.events.reduce((acc, event) => { acc[event.type] = (acc[event.type] || 0) + 1; return acc; }, {}));
-  const lowConfidence = [...D.persons].filter(person => (person.confidence || 0) < 0.85).sort((a, b) => (a.confidence || 0) - (b.confidence || 0));
-  const living = D.persons.filter(p => p.is_living).length;
-  const deceased = D.persons.length - living;
+  const S = getScopedDataset();
+  const totalPersons = S.persons.length || 1;
+  const totalEvents = S.events.length || 1;
+  const byBranch = S.branches.map(branch => ({ branch, count: S.persons.filter(person => (person.branch_ids || []).includes(branch.id)).length }));
+  const eventCounts = Object.entries(S.events.reduce((acc, event) => { acc[event.type] = (acc[event.type] || 0) + 1; return acc; }, {}));
+  const lowConfidence = [...S.persons].filter(person => (person.confidence || 0) < 0.85).sort((a, b) => (a.confidence || 0) - (b.confidence || 0));
+  const living = S.persons.filter(p => p.is_living).length;
+  const deceased = S.persons.length - living;
 
   return `
     <div class="admin-overview-grid">
       <div class="admin-stats-grid">
         ${[
-          ['Persons', D.persons.length], ['Events', D.events.length], ['Stories', D.stories.length],
-          ['Media', D.media.length], ['Branches', D.branches.length], ['Locations', Object.keys(D.locations).length]
+          ['Persons', S.persons.length], ['Events', S.events.length], ['Stories', S.stories.length],
+          ['Media', S.media.length], ['Branches', S.branches.length], ['Locations', Object.keys(S.locations).length]
         ].map(([label, value]) => `
           <div class="overview-stat"><div class="overview-stat-num">${value}</div><div class="overview-stat-label">${label}</div></div>
         `).join('')}
@@ -4850,7 +4932,7 @@ function renderAdminOverview() {
 }
 
 function renderAdminEditor() {
-  const records = D[adminEditorType] || [];
+  const records = scopedRecords(adminEditorType);
   if (!adminEditorRecordId && records[0]) {
     adminEditorRecordId = records[0].id;
     adminEditorOriginal = JSON.stringify(records[0], null, 2);
@@ -5001,9 +5083,116 @@ function confirmDeleteProfileType(id) {
   renderAdmin();
 }
 
+function renderFamilyAdmins() {
+  const admins = D.settings.family_admins || [];
+  return `
+    <div class="profile-type-admin-list">
+      ${admins.map(admin => `
+        <div class="admin-card">
+          <div class="mini-section-title">${escapeHtml(admin.name)}</div>
+          <div class="form-field">
+            <label class="form-label">Assigned Branches</label>
+            <div class="profile-field-toggles">
+              ${D.branches.map(branch => `<label class="profile-field-toggle"><input type="checkbox" ${(admin.branch_ids || []).includes(branch.id) ? 'checked' : ''} onchange="toggleFamilyAdminBranch('${admin.id}','${branch.id}',this.checked)"> ${escapeHtml(branch.name)}</label>`).join('')}
+            </div>
+          </div>
+          <div class="form-field"><label class="form-label">Reset Password</label><input class="legacy-input" type="password" placeholder="Leave blank to keep current password" onchange="resetFamilyAdminPassword('${admin.id}',this.value)"></div>
+          <div class="profile-sources">Created ${escapeHtml(admin.created_at || 'Unknown')}</div>
+          <div class="admin-action-row">
+            ${familyAdminPendingDeleteId === admin.id ? `<span>Remove this Family Admin?</span><button class="duplicate-btn" onclick="confirmRemoveFamilyAdmin('${admin.id}')">Yes, remove</button><button class="duplicate-btn" onclick="familyAdminPendingDeleteId=null;renderAdmin()">Cancel</button>` : `<button class="duplicate-btn" onclick="familyAdminPendingDeleteId='${admin.id}';renderAdmin()">Remove</button>`}
+          </div>
+        </div>
+      `).join('') || '<div class="green-note">No Family Admins have been added yet.</div>'}
+      <div class="admin-card">
+        <div class="mini-section-title">Add Family Admin</div>
+        <div id="family-admin-message"></div>
+        <div class="contribute-form-grid">
+          <div class="form-field"><label class="form-label">Name</label><input class="legacy-input" id="new-family-admin-name"></div>
+          <div class="form-field"><label class="form-label">Password</label><input class="legacy-input" id="new-family-admin-password" type="password"></div>
+          <div class="form-field full"><label class="form-label">Branches</label><div class="profile-field-toggles">${D.branches.map(branch => `<label class="profile-field-toggle"><input type="checkbox" name="new-family-admin-branch" value="${branch.id}"> ${escapeHtml(branch.name)}</label>`).join('')}</div></div>
+        </div>
+        <button class="export-btn" type="button" onclick="addFamilyAdmin()">Add Family Admin</button>
+      </div>
+    </div>`;
+}
+
+function addFamilyAdmin() {
+  const name = document.getElementById('new-family-admin-name').value.trim();
+  const password = document.getElementById('new-family-admin-password').value;
+  const branchIds = [...document.querySelectorAll('[name="new-family-admin-branch"]:checked')].map(input => input.value);
+  const message = document.getElementById('family-admin-message');
+  if (!name || !password || !branchIds.length) {
+    message.innerHTML = '<div class="inline-message error">Name, password, and at least one branch are required.</div>';
+    return;
+  }
+  D.settings.family_admins.push({ id: `famadmin_${Date.now()}`, name, password_hash: simplePasswordHash(password), branch_ids: branchIds, created_by: 'super_admin', created_at: new Date().toISOString().slice(0, 10) });
+  renderAdmin();
+}
+
+function toggleFamilyAdminBranch(id, branchId, checked) {
+  const admin = D.settings.family_admins.find(item => item.id === id);
+  if (!admin) return;
+  const ids = new Set(admin.branch_ids || []);
+  checked ? ids.add(branchId) : ids.delete(branchId);
+  admin.branch_ids = [...ids];
+}
+
+function resetFamilyAdminPassword(id, password) {
+  if (!password) return;
+  const admin = D.settings.family_admins.find(item => item.id === id);
+  if (admin) admin.password_hash = simplePasswordHash(password);
+}
+
+function confirmRemoveFamilyAdmin(id) {
+  D.settings.family_admins = D.settings.family_admins.filter(admin => admin.id !== id);
+  familyAdminPendingDeleteId = null;
+  renderAdmin();
+}
+
+function getPendingSubmissions() {
+  return ['persons','events','stories'].flatMap(type => scopedRecords(type).filter(record => record.status === 'submitted').map(record => ({ type, record })));
+}
+
+function renderPendingSubmissions() {
+  const pending = getPendingSubmissions();
+  return pending.length ? pending.map(({ type, record }) => `
+    <div class="admin-card" style="margin-bottom:14px;">
+      <div class="mini-section-title">${escapeHtml(record.name?.display || record.title || record.id)}</div>
+      <div class="profile-sources">${escapeHtml(type.slice(0,-1))} · submitted by ${escapeHtml(record.submitted_by || 'anonymous')}</div>
+      <div class="admin-action-row" style="margin-top:14px;">
+        <button class="export-btn" onclick="approveSubmission('${type}','${record.id}')">Approve</button>
+        <button class="export-btn" onclick="openPendingForEdit('${type}','${record.id}')">Edit First</button>
+        <button class="duplicate-btn" onclick="rejectSubmission('${type}','${record.id}',this)">Reject</button>
+      </div>
+    </div>`).join('') : '<div class="green-note">No pending submissions in your assigned branches.</div>';
+}
+
+function approveSubmission(type, id) {
+  const record = (D[type] || []).find(item => item.id === id);
+  if (record && recordInAdminScope(record)) record.status = 'approved';
+  renderAdmin();
+}
+
+function openPendingForEdit(type, id) {
+  adminEditorType = type;
+  adminEditorRecordId = id;
+  adminTab = 'editor';
+  renderAdmin();
+}
+
+function rejectSubmission(type, id, button) {
+  if (button.dataset.confirm !== 'true') {
+    button.dataset.confirm = 'true';
+    button.textContent = 'Click again to confirm';
+    return;
+  }
+  D[type] = D[type].filter(record => record.id !== id || !recordInAdminScope(record));
+  renderAdmin();
+}
+
 function setAdminEditorType(type) {
   adminEditorType = type;
-  const records = D[type] || [];
+  const records = scopedRecords(type);
   adminEditorRecordId = records[0]?.id || '';
   adminEditorOriginal = records[0] ? JSON.stringify(records[0], null, 2) : '';
   renderAdmin();
@@ -5025,6 +5214,7 @@ function saveAdminRecord() {
   try {
     const parsed = JSON.parse(textarea.value);
     if (!parsed.id) throw new Error('Record must include an id field.');
+    if (!recordInAdminScope(parsed)) throw new Error('This record is not in your assigned branch.');
     const records = D[adminEditorType];
     const index = records.findIndex(record => record.id === adminEditorRecordId);
     if (index === -1) throw new Error('Original record could not be found.');
@@ -5064,7 +5254,7 @@ function setAdminExportMessage(message) {
 
 function exportAllData() {
   const date = new Date().toISOString().slice(0, 10);
-  downloadBlob(`family-legacy-export-${date}.json`, JSON.stringify(D, null, 2), 'application/json');
+  downloadBlob(`family-legacy-export-${date}.json`, JSON.stringify(getScopedDataset(), null, 2), 'application/json');
   setAdminExportMessage('Full dataset exported.');
 }
 
@@ -5077,7 +5267,7 @@ function exportPersonsCsv() {
   const date = new Date().toISOString().slice(0, 10);
   const rows = [
     ['id','display_name','first','last','maiden','birth_date','birth_certainty','death_date','is_living','branch_ids','confidence','tags'],
-    ...D.persons.map(person => [
+    ...scopedRecords('persons').map(person => [
       person.id, person.name.display, person.name.first, person.name.last, person.name.maiden || '',
       person.birth?.date || '', person.birth?.certainty || '', person.death?.date || '', person.is_living,
       (person.branch_ids || []).join('|'), person.confidence ?? '', (person.tags || []).join('|')
@@ -5091,7 +5281,7 @@ function exportEventsCsv() {
   const date = new Date().toISOString().slice(0, 10);
   const rows = [
     ['id','type','title','date_start','date_certainty','location','people_count','tags'],
-    ...D.events.map(event => [
+    ...scopedRecords('events').map(event => [
       event.id, event.type, event.title, event.date?.start || '', event.date?.certainty || '',
       event.location_id ? getLoc(event.location_id) : '', (event.people || []).length, (event.tags || []).join('|')
     ])
@@ -5102,10 +5292,11 @@ function exportEventsCsv() {
 
 function scanDuplicates() {
   const pairs = [];
-  for (let i = 0; i < D.persons.length; i++) {
-    for (let j = i + 1; j < D.persons.length; j++) {
-      const a = D.persons[i];
-      const b = D.persons[j];
+  const people = scopedRecords('persons');
+  for (let i = 0; i < people.length; i++) {
+    for (let j = i + 1; j < people.length; j++) {
+      const a = people[i];
+      const b = people[j];
       const key = [a.id, b.id].sort().join('|');
       if (adminDismissedDuplicates.has(key)) continue;
       let score = 0;

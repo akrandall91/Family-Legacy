@@ -609,9 +609,10 @@ const FamilyData = {
   // guided contribution flow.
   // --------------------------------------------------------
   settings: {
-    // WARNING: this is only a casual-visitor deterrent. This is a public
-    // static site, so anyone can read this password in the source.
-    admin_password: "Nipsey2020",
+    // WARNING: these hashes are only casual-visitor deterrents. This is a
+    // public static site, so anyone can inspect the source and gate logic.
+    admin_password_hash: "3a6e3b6f",
+    family_admins: [],
     profile_types: [
       {
         id: "elder",
