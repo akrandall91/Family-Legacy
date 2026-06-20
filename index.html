@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Family Legacy Platform</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=DM+Mono:wght@300;400;500&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Pinyon+Script&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 
 <style>
 /* ============================================================
@@ -2540,6 +2540,165 @@ img { max-width: 100%; }
 @media (min-width: 769px) and (max-width: 1024px) {
   .gallery-masonry { column-count: 2; }
 }
+
+/* ============================================================
+   EDITORIAL LIGHT THEME + MOTION
+============================================================ */
+:root {
+  --paper: #f8f4ed;
+  --cream: #fffdf8;
+  --ink: #211b17;
+  --sepia: #382b24;
+  --gold: #a4674d;
+  --gold-lt: #c18a70;
+  --rust: #a4674d;
+  --dust: #827369;
+  --rule: #ded2c7;
+  --shadow: rgba(46,31,24,0.08);
+  --panel: #f1e9e1;
+}
+
+body,
+.legacy-input,
+.legacy-select,
+.legacy-textarea,
+.picker-search-input {
+  font-family: 'Lora', Georgia, serif;
+}
+
+.home-title,
+.nav-brand-name,
+.person-page-name {
+  font-family: 'Pinyon Script', cursive;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.home-title { font-size: clamp(68px, 9vw, 118px); line-height: 0.8; }
+.nav-brand-name { font-size: 27px; white-space: nowrap; }
+.nav-brand { flex-shrink: 0; }
+.page-title em,
+.home-section-title,
+.branch-detail-name,
+.story-full-title {
+  font-family: 'Pinyon Script', cursive;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.page-title { margin-bottom: 22px; }
+.page-title em { font-size: 1.18em; }
+
+.branch-card,
+.person-card,
+.story-full,
+.admin-card,
+.editor-shell,
+.contribute-panel,
+.profile-type-step,
+.media-card {
+  border-radius: 8px;
+  box-shadow: 0 10px 30px var(--shadow);
+}
+
+.branch-card,
+.person-card,
+.admin-card,
+.editor-shell { padding: 26px; }
+
+.legacy-input,
+.legacy-select,
+.legacy-textarea,
+.picker-search-input {
+  border-radius: 6px;
+  background: #fffdf9;
+}
+
+.export-btn,
+.duplicate-btn,
+.form-submit-btn,
+.contribute-tab,
+.filter-pill {
+  border-radius: 5px;
+}
+
+#page-branches,
+#page-contribute,
+#page-search,
+#page-gallery,
+#page-person,
+#page-admin,
+#page-edit-data {
+  padding-top: 70px;
+  padding-bottom: 110px;
+}
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity .8s ease, transform .8s cubic-bezier(.2,.7,.2,1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.scroll-reveal.is-revealed { opacity: 1; transform: none; }
+.reveal-story { transform: perspective(700px) rotateX(3deg) translateY(20px); transform-origin: top; }
+.reveal-branch { transform: scaleY(.96) translateY(18px); transform-origin: top; }
+.reveal-gallery { transform: scale(.97) translateY(18px); }
+.reveal-left { transform: translateX(-30px); }
+.reveal-right { transform: translateX(30px); }
+
+.branch-card-bar {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 1s ease .25s;
+}
+.is-revealed .branch-card-bar { transform: scaleX(1); }
+
+.story-full::before {
+  content: '“';
+  display: block;
+  color: var(--gold);
+  font-family: 'Pinyon Script', cursive;
+  font-size: 42px;
+  line-height: .5;
+  opacity: 0;
+  transition: opacity .8s ease .35s;
+}
+.story-full.is-revealed::before { opacity: .7; }
+
+.home-hero .home-title,
+.home-hero .home-tagline {
+  animation: heroEditorial 1s cubic-bezier(.2,.7,.2,1) both;
+}
+.home-hero .home-tagline { animation-delay: .18s; }
+@keyframes heroEditorial {
+  from { opacity: 0; transform: translateY(20px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+#tree-svg .edges path,
+#tree-svg .edges line {
+  stroke-dasharray: 800;
+  stroke-dashoffset: 800;
+  animation: drawBranch 1.4s ease forwards;
+}
+#tree-svg .person-node {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: revealTreeNode .65s ease .85s forwards;
+}
+@keyframes drawBranch { to { stroke-dashoffset: 0; } }
+@keyframes revealTreeNode { from { opacity: 0; scale: .96; } to { opacity: 1; scale: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .scroll-reveal { opacity: 1; transform: none; }
+}
 </style>
 </head>
 <body>
@@ -3175,6 +3334,7 @@ let familyAdminPendingDeleteId = null;
 let currentUserRole = null;
 let currentUserName = '';
 let currentUserBranchIds = [];
+let pageRevealObserver = null;
 const pickerState = {
   event: { selected: [], query: '' },
   story: { selected: [], query: '' }
@@ -3213,6 +3373,46 @@ function showPage(name) {
   if (name === 'admin' || name === 'edit-data') {
     renderProtectedPage(name);
   }
+  requestAnimationFrame(() => setupPageReveals(name));
+}
+
+function setupPageReveals(name) {
+  if (pageRevealObserver) pageRevealObserver.disconnect();
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const selectors = {
+    home: ['.anniversary-widget', '.home-sections > div'],
+    timeline: ['.tl-event'],
+    people: ['.person-card'],
+    stories: ['.story-full'],
+    branches: ['.branch-card'],
+    gallery: ['.media-card'],
+    person: ['.person-page-section']
+  };
+  const page = document.getElementById(`page-${name}`);
+  if (!page || !selectors[name]) return;
+  const items = selectors[name].flatMap(selector => [...page.querySelectorAll(selector)]);
+  items.forEach((item, index) => {
+    item.classList.remove('is-revealed');
+    item.classList.add('scroll-reveal');
+    item.classList.toggle('reveal-story', name === 'stories');
+    item.classList.toggle('reveal-branch', name === 'branches');
+    item.classList.toggle('reveal-gallery', name === 'gallery');
+    item.classList.toggle('reveal-left', name === 'timeline' && index % 2 === 0);
+    item.classList.toggle('reveal-right', name === 'timeline' && index % 2 === 1);
+    item.style.setProperty('--reveal-delay', `${(index % 5) * 80}ms`);
+  });
+  if (reduceMotion) {
+    items.forEach(item => item.classList.add('is-revealed'));
+    return;
+  }
+  pageRevealObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('is-revealed');
+      pageRevealObserver.unobserve(entry.target);
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
+  items.forEach(item => pageRevealObserver.observe(item));
 }
 
 // NOT SECURE: this site is entirely static, so the password and all gate
