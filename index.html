@@ -381,6 +381,10 @@ img { max-width: 100%; }
   flex-direction: column;
 }
 
+#page-tree:not(.active) {
+  display: none;
+}
+
 .tree-toolbar {
   background: var(--panel);
   border-bottom: 1px solid var(--rule);
@@ -1411,6 +1415,94 @@ img { max-width: 100%; }
   margin-bottom: 24px;
 }
 
+.profile-type-step {
+  background: var(--cream);
+  border: 1px solid var(--rule);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.profile-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.profile-type-choice {
+  text-align: left;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--sepia);
+  padding: 16px;
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+
+.profile-type-choice:hover {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 18px var(--shadow);
+}
+
+.profile-type-choice strong {
+  display: block;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 21px;
+  margin-bottom: 5px;
+}
+
+.profile-type-choice span,
+.profile-selection-summary {
+  color: var(--dust);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.profile-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+}
+
+.profile-change-link,
+.prompt-suggestion {
+  border: 0;
+  background: transparent;
+  color: var(--gold);
+  text-decoration: underline;
+  padding: 0;
+}
+
+.story-prompt-guide {
+  padding: 14px;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+}
+
+.prompt-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.prompt-suggestion {
+  text-align: left;
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  padding: 8px 10px;
+}
+
+.contribute-tab.deemphasized,
+.profile-photo-field.deemphasized {
+  opacity: 0.48;
+}
+
 .contribute-tab.active {
   background: var(--gold);
   color: white;
@@ -2028,6 +2120,39 @@ img { max-width: 100%; }
   padding: 20px;
 }
 
+.password-gate {
+  max-width: 520px;
+}
+
+.profile-type-admin-list {
+  display: grid;
+  gap: 16px;
+}
+
+.profile-type-admin-card {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-prompt-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.profile-field-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.profile-field-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sepia);
+}
+
 .admin-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -2385,6 +2510,17 @@ img { max-width: 100%; }
 }
 
 @media (max-width: 768px) {
+  #nav { padding: 0 12px; gap: 10px; }
+  .nav-brand { flex: 0 0 auto; }
+  .nav-brand-name { font-size: 17px; }
+  .nav-links {
+    min-width: 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-btn { flex: 0 0 auto; padding: 6px 10px; }
   .home-hero { grid-template-columns: 1fr; }
   .home-sections { grid-template-columns: 1fr; }
   .contribute-form-grid { grid-template-columns: 1fr; }
@@ -2524,9 +2660,12 @@ img { max-width: 100%; }
       <h1 class="page-title">Contribute <em>Memories</em></h1>
     </div>
     <p class="page-intro">Add a person, event, or story directly into this working prototype. New entries are written into the live in-memory dataset right away.</p>
+    <div id="contribute-profile-step"></div>
+    <div id="contribute-workflow" style="display:none;">
+    <div id="contribute-profile-summary"></div>
     <div class="contribute-tabs">
       <button class="contribute-tab active" onclick="showContributeTab('person')">Add a Person</button>
-      <button class="contribute-tab" onclick="showContributeTab('event')">Add an Event</button>
+      <button class="contribute-tab" data-contribute-feature="event" onclick="showContributeTab('event')">Add an Event</button>
       <button class="contribute-tab" onclick="showContributeTab('story')">Submit a Story</button>
     </div>
 
@@ -2576,6 +2715,10 @@ img { max-width: 100%; }
           <div class="form-field full">
             <label class="form-label" for="person-bio">Notes / Bio</label>
             <textarea class="legacy-textarea" id="person-bio" placeholder="Family memories, context, or notes about this person"></textarea>
+          </div>
+          <div class="form-field full profile-photo-field">
+            <label class="form-label" for="person-photo-link">Photo Link</label>
+            <input class="legacy-input" id="person-photo-link" type="url" placeholder="Optional link to a family photo">
           </div>
           <div class="form-field full">
             <label class="form-label" for="person-submitted-by">Your Name</label>
@@ -2644,6 +2787,10 @@ img { max-width: 100%; }
             <label class="form-label" for="event-submitted-by">Your Name</label>
             <input class="legacy-input" id="event-submitted-by" type="text">
           </div>
+          <div class="form-field full profile-photo-field">
+            <label class="form-label" for="event-photo-link">Photo Link</label>
+            <input class="legacy-input" id="event-photo-link" type="url" placeholder="Optional link related to this event">
+          </div>
         </div>
         <div style="margin-top:22px;">
           <button class="form-submit-btn" type="submit">Create Event</button>
@@ -2659,6 +2806,7 @@ img { max-width: 100%; }
             <label class="form-label" for="story-title">Title <span class="field-required">*</span></label>
             <input class="legacy-input" id="story-title" type="text" required>
           </div>
+          <div class="form-field full" id="story-prompt-guide"></div>
           <div class="form-field full">
             <label class="form-label" for="story-body">Story Body <span class="field-required">*</span></label>
             <textarea class="legacy-textarea" id="story-body" style="min-height:220px;" required placeholder="Tell the memory in full."></textarea>
@@ -2679,12 +2827,17 @@ img { max-width: 100%; }
             <label class="form-label" for="story-submitted-by">Your Name</label>
             <input class="legacy-input" id="story-submitted-by" type="text">
           </div>
+          <div class="form-field full profile-photo-field">
+            <label class="form-label" for="story-photo-link">Photo Link</label>
+            <input class="legacy-input" id="story-photo-link" type="url" placeholder="Optional link that accompanies this story">
+          </div>
         </div>
         <div style="margin-top:22px;">
           <button class="form-submit-btn" type="submit">Create Story</button>
         </div>
       </form>
       <div id="contribute-success-story"></div>
+    </div>
     </div>
   </div>
 
@@ -3015,6 +3168,9 @@ let adminEditorType = 'persons';
 let adminEditorRecordId = '';
 let adminEditorOriginal = '';
 let adminDismissedDuplicates = new Set();
+let editDataType = 'persons';
+let selectedProfileType = null;
+let profileTypePendingDeleteId = null;
 const pickerState = {
   event: { selected: [], query: '' },
   story: { selected: [], query: '' }
@@ -3050,14 +3206,71 @@ function showPage(name) {
   if (name === 'search') renderSearchPage();
   if (name === 'gallery') renderGallery();
   if (name === 'person') renderPersonPage();
+  if (name === 'admin' || name === 'edit-data') {
+    renderProtectedPage(name);
+  }
+}
+
+// NOT SECURE: this site is entirely static, so the password and all gate
+// logic are visible in the public source. This only discourages casual
+// visitors; it does not protect private data or replace real authentication.
+function isAdminSessionUnlocked() {
+  try {
+    return sessionStorage.getItem('familyLegacyAdminUnlocked') === 'true';
+  } catch (error) {
+    return false;
+  }
+}
+
+function renderProtectedPage(name) {
+  if (isAdminSessionUnlocked()) {
+    if (name === 'admin') renderAdmin();
+    if (name === 'edit-data') renderEditData();
+    return;
+  }
+
+  const root = document.getElementById(name === 'admin' ? 'admin-root' : 'edit-data-root');
+  if (!root) return;
+  root.innerHTML = `
+    <div class="admin-card password-gate">
+      <div class="mini-section-title">Family Admin Access</div>
+      <p class="page-intro" style="margin-bottom:18px;">Enter the family admin password to continue for this browser session.</p>
+      <form onsubmit="unlockProtectedPage(event, '${name}')">
+        <div class="form-field">
+          <label class="form-label" for="${name}-password">Password</label>
+          <input class="legacy-input" id="${name}-password" type="password" autocomplete="current-password" required>
+        </div>
+        <div id="${name}-gate-message" style="margin-top:14px;"></div>
+        <button class="export-btn" type="submit">Unlock</button>
+      </form>
+    </div>
+  `;
+}
+
+function unlockProtectedPage(event, name) {
+  event.preventDefault();
+  const input = document.getElementById(`${name}-password`);
+  const message = document.getElementById(`${name}-gate-message`);
+  if (!input) return;
+  if (input.value !== D.settings.admin_password) {
+    if (message) message.innerHTML = '<div class="inline-message error">That password did not match.</div>';
+    input.select();
+    return;
+  }
+  try {
+    sessionStorage.setItem('familyLegacyAdminUnlocked', 'true');
+  } catch (error) {
+    // The page can still unlock if storage is unavailable.
+  }
   if (name === 'admin') renderAdmin();
+  if (name === 'edit-data') renderEditData();
 }
 
 // Fix nav button matching
 document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.onclick = () => {
     const label = btn.textContent.trim().replace(/^âš™\s*/, '');
-    const pages = { 'Home':'home','Tree':'tree','Timeline':'timeline','People':'people','Stories':'stories', 'Branches':'branches', 'Contribute':'contribute', 'Search':'search', 'Gallery':'gallery', 'Admin':'admin' };
+    const pages = { 'Home':'home','Tree':'tree','Timeline':'timeline','People':'people','Stories':'stories', 'Branches':'branches', 'Contribute':'contribute', 'Search':'search', 'Gallery':'gallery', 'Edit Data':'edit-data', 'Admin':'admin' };
     const p = pages[label];
     if (p) showPage(p);
   };
@@ -3709,9 +3922,95 @@ function closeBranchDetail() {
 // CONTRIBUTE
 // ============================================================
 function renderContribute() {
+  renderProfileTypeStep();
+  if (!selectedProfileType) return;
   showContributeTab(activeContributeTab);
+  applyProfileTypeGuidance();
   renderPersonPicker('event');
   renderPersonPicker('story');
+}
+
+function renderProfileTypeStep() {
+  const step = document.getElementById('contribute-profile-step');
+  const workflow = document.getElementById('contribute-workflow');
+  const summary = document.getElementById('contribute-profile-summary');
+  if (!step || !workflow || !summary) return;
+
+  const selected = getProfileType(selectedProfileType);
+  if (!selected) {
+    selectedProfileType = null;
+    workflow.style.display = 'none';
+    step.innerHTML = `
+      <div class="profile-type-step">
+        <div class="mini-section-title">Which best describes you?</div>
+        <div class="profile-type-grid">
+          ${(D.settings.profile_types || []).map(type => `
+            <button class="profile-type-choice" type="button" onclick="selectProfileType('${type.id}')">
+              <strong>${escapeHtml(type.label)}</strong>
+              <span>${escapeHtml(type.description || '')}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    summary.innerHTML = '';
+    return;
+  }
+
+  step.innerHTML = '';
+  workflow.style.display = 'block';
+  summary.innerHTML = `
+    <div class="profile-selection-bar">
+      <div class="profile-selection-summary">Guided for <strong>${escapeHtml(selected.label)}</strong> — ${escapeHtml(selected.description || '')}</div>
+      <button class="profile-change-link" type="button" onclick="resetProfileType()">Change who I am</button>
+    </div>
+  `;
+}
+
+function selectProfileType(id) {
+  selectedProfileType = id;
+  renderContribute();
+}
+
+function resetProfileType() {
+  selectedProfileType = null;
+  renderContribute();
+}
+
+function applyProfileTypeGuidance() {
+  const type = getProfileType(selectedProfileType);
+  if (!type) return;
+  const fields = type.show_fields || [];
+  const eventTab = document.querySelector('[data-contribute-feature="event"]');
+  if (eventTab) eventTab.classList.toggle('deemphasized', !fields.includes('event'));
+  document.querySelectorAll('.profile-photo-field').forEach(field => {
+    field.classList.toggle('deemphasized', !fields.includes('photo'));
+  });
+  const guide = document.getElementById('story-prompt-guide');
+  if (guide) {
+    guide.innerHTML = `
+      <div class="story-prompt-guide">
+        <div class="form-label">Need a place to begin?</div>
+        <div class="prompt-suggestions">
+          ${(type.prompts || []).map((prompt, index) => `
+            <button class="prompt-suggestion" type="button" onclick="useStoryPrompt(${index})">${escapeHtml(prompt)}</button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+}
+
+function useStoryPrompt(index) {
+  const type = getProfileType(selectedProfileType);
+  const prompt = type?.prompts?.[index];
+  const body = document.getElementById('story-body');
+  if (!prompt || !body) return;
+  body.placeholder = prompt;
+  if (!body.value.trim()) body.value = `${prompt}\n\n`;
+  showContributeTab('story');
+  body.focus();
+  body.setSelectionRange(body.value.length, body.value.length);
 }
 
 function showContributeTab(tab) {
@@ -3809,6 +4108,21 @@ function showContributionError(kind, message) {
   container.innerHTML = `<div class="inline-message error">${escapeHtml(message)}</div>`;
 }
 
+const GOOGLE_SHEETS_SUBMISSION_URL = 'https://script.google.com/macros/s/AKfycbwUf-D4OXHrmHeMazS_WhareKtJY_2X6g2rywzUCJlt1Ec6a6TelG6wswBMtkKD3G6wkA/exec';
+
+function sendSubmissionToGoogleSheets(payload) {
+  try {
+    fetch(GOOGLE_SHEETS_SUBMISSION_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  } catch (error) {
+    // Best effort only: the in-memory save and success message take priority.
+  }
+}
+
 function submitPersonForm(event) {
   event.preventDefault();
 
@@ -3826,6 +4140,7 @@ function submitPersonForm(event) {
   const birthLocation = document.getElementById('person-birth-location').value.trim();
   const isLiving = document.getElementById('person-living').value === 'true';
   const bio = document.getElementById('person-bio').value.trim();
+  const photoLink = document.getElementById('person-photo-link').value.trim();
   const submittedBy = document.getElementById('person-submitted-by').value.trim() || 'anonymous';
 
   let locationId = null;
@@ -3865,6 +4180,22 @@ function submitPersonForm(event) {
   };
 
   D.persons.push(person);
+  sendSubmissionToGoogleSheets({
+    submissionType: 'person',
+    firstName: first,
+    lastName: last,
+    maidenName: maiden,
+    nickname,
+    relationship: selectedProfileType || '',
+    birthYear,
+    birthCertainty,
+    birthLocation,
+    living: isLiving,
+    bio,
+    photoLink,
+    submittedBy,
+    submittedEmail: ''
+  });
   document.querySelector('#contribute-panel-person form').reset();
   document.getElementById('person-living').value = 'true';
   document.querySelectorAll('#person-living-toggle .legacy-toggle-btn').forEach(button => button.classList.remove('active'));
@@ -3889,6 +4220,7 @@ function submitEventForm(event) {
   const selectedPeople = pickerState.event.selected.slice();
   const location = document.getElementById('event-location').value.trim();
   const recurring = document.getElementById('event-recurring').value === 'true';
+  const photoLink = document.getElementById('event-photo-link').value.trim();
   const submittedBy = document.getElementById('event-submitted-by').value.trim() || 'anonymous';
 
   let locationId = null;
@@ -3926,6 +4258,18 @@ function submitEventForm(event) {
   };
 
   D.events.push(createdEvent);
+  sendSubmissionToGoogleSheets({
+    submissionType: 'event',
+    relationship: selectedProfileType || '',
+    eventTitle: title,
+    eventType: type,
+    eventDate: dateDisplay,
+    birthLocation: location,
+    bio: description,
+    photoLink,
+    submittedBy,
+    submittedEmail: ''
+  });
   document.querySelector('#contribute-panel-event form').reset();
   pickerState.event.selected = [];
   pickerState.event.query = '';
@@ -3950,6 +4294,7 @@ function submitStoryForm(event) {
   const peopleIds = pickerState.story.selected.slice();
   const era = document.getElementById('story-era').value.trim();
   const toldByName = document.getElementById('story-told-by').value.trim();
+  const photoLink = document.getElementById('story-photo-link').value.trim();
   const submittedBy = document.getElementById('story-submitted-by').value.trim() || 'anonymous';
   let toldById = null;
 
@@ -3977,6 +4322,15 @@ function submitStoryForm(event) {
   };
 
   D.stories.push(story);
+  sendSubmissionToGoogleSheets({
+    submissionType: 'story',
+    relationship: selectedProfileType || '',
+    storyTitle: title,
+    storyBody: body,
+    photoLink,
+    submittedBy,
+    submittedEmail: ''
+  });
   document.querySelector('#contribute-panel-story form').reset();
   pickerState.story.selected = [];
   pickerState.story.query = '';
@@ -4308,6 +4662,109 @@ function renderPersonPage() {
 // ============================================================
 // ADMIN
 // ============================================================
+function renderEditData() {
+  const root = document.getElementById('edit-data-root');
+  if (!root) return;
+  const value = D[editDataType] ?? (editDataType === 'locations' ? {} : []);
+  root.innerHTML = `
+    <div class="editor-shell">
+      <div class="admin-warning">Changes update this browser's live data only. Export the JavaScript file to save them back to the repository.</div>
+      <div id="edit-data-message"></div>
+      <div class="editor-controls">
+        <select class="legacy-select" onchange="setEditDataType(this.value)">
+          ${['persons','branches','events','stories','media','locations','sources'].map(type =>
+            `<option value="${type}" ${editDataType === type ? 'selected' : ''}>${type[0].toUpperCase() + type.slice(1)}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <textarea id="edit-data-json" class="legacy-textarea editor-textarea">${escapeHtml(JSON.stringify(value, null, 2))}</textarea>
+      <div class="admin-action-row" style="margin-top:14px;">
+        <button class="export-btn" type="button" onclick="saveEditData()">Save to live data</button>
+        <button class="export-btn" type="button" onclick="exportFamilyDataJs()">Export updated family-legacy-data.js</button>
+      </div>
+    </div>
+  `;
+}
+
+function setEditDataType(type) {
+  editDataType = type;
+  renderEditData();
+}
+
+function setEditDataMessage(message, status = 'success') {
+  const el = document.getElementById('edit-data-message');
+  if (el) el.innerHTML = `<div class="inline-message ${status}">${escapeHtml(message)}</div>`;
+}
+
+function saveEditData() {
+  const textarea = document.getElementById('edit-data-json');
+  if (!textarea) return;
+  try {
+    const parsed = JSON.parse(textarea.value);
+    if (editDataType === 'locations') {
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+        throw new Error('Locations must be a JSON object keyed by location id.');
+      }
+    } else if (!Array.isArray(parsed)) {
+      throw new Error(`${editDataType} must be a JSON array.`);
+    }
+    D[editDataType] = parsed;
+    refreshAllDerivedViews();
+    setEditDataMessage(`${editDataType} updated in live data.`);
+  } catch (error) {
+    setEditDataMessage(error.message, 'error');
+  }
+}
+
+function serializeFamilyDataJs() {
+  const sections = [
+    ['META', 'Top-level information about the site and family.', 'meta'],
+    ['BRANCHES', 'Family lines and their root people.', 'branches'],
+    ['PERSONS', 'People and their family relationships.', 'persons'],
+    ['EVENTS', 'Family milestones and timeline entries.', 'events'],
+    ['STORIES', 'Written memories and oral history.', 'stories'],
+    ['MEDIA', 'Photos, videos, and documents.', 'media'],
+    ['LOCATIONS', 'Object keyed by location id.', 'locations'],
+    ['SOURCES', 'Research and source records.', 'sources'],
+    ['SETTINGS', 'Site-wide configuration.', 'settings']
+  ];
+  const body = sections.map(([title, description, key], index) => `  // --------------------------------------------------------
+  // ${title}
+  // ${description}
+  // --------------------------------------------------------
+  ${key}: ${JSON.stringify(D[key], null, 2).replace(/\n/g, '\n  ')}${index < sections.length - 1 ? ',' : ''}`).join('\n\n');
+  return `// ============================================================
+// FAMILY LEGACY PLATFORM — Family Data
+// Rowe / Randall Family
+// ============================================================
+//
+// ⚠️  PRIVACY WARNING — READ BEFORE EDITING  ⚠️
+// This file is loaded by index.html on GitHub Pages, which is a
+// PUBLIC static site. ANYONE can view this file's full contents
+// by opening it directly or using View Source / browser tools.
+//
+// DO NOT put in this file until real authentication and a private
+// backend exist:
+//   - Exact birth dates for LIVING people
+//   - Home addresses, phone numbers, or email addresses
+//   - Sensitive medical, legal, or financial details
+//   - Anything a living relative has not agreed to publish
+//
+// Privacy labels are descriptive only. They do not hide data from
+// this public file, so keep sensitive family details out of it.
+// ============================================================
+
+${'const ' + 'FamilyData = {'}
+${body}
+};
+`;
+}
+
+function exportFamilyDataJs() {
+  downloadBlob('family-legacy-data.js', serializeFamilyDataJs(), 'text/javascript;charset=utf-8');
+  setEditDataMessage('Updated family-legacy-data.js downloaded.');
+}
+
 function renderAdmin() {
   const root = document.getElementById('admin-root');
   if (!root) return;
@@ -4316,11 +4773,14 @@ function renderAdmin() {
     <div class="admin-tabs">
       <button class="filter-pill ${adminTab === 'overview' ? 'active' : ''}" onclick="setAdminTab('overview')">Data Overview</button>
       <button class="filter-pill ${adminTab === 'editor' ? 'active' : ''}" onclick="setAdminTab('editor')">Edit Records</button>
+      <button class="filter-pill ${adminTab === 'profile-types' ? 'active' : ''}" onclick="setAdminTab('profile-types')">Profile Types</button>
       <button class="filter-pill ${adminTab === 'export' ? 'active' : ''}" onclick="setAdminTab('export')">Export</button>
       <button class="filter-pill ${adminTab === 'duplicates' ? 'active' : ''}" onclick="setAdminTab('duplicates')">Duplicate Detector</button>
+      <button class="filter-pill" onclick="showPage('edit-data')">Full Data Editor</button>
     </div>
     ${adminTab === 'overview' ? renderAdminOverview() : ''}
     ${adminTab === 'editor' ? renderAdminEditor() : ''}
+    ${adminTab === 'profile-types' ? renderAdminProfileTypes() : ''}
     ${adminTab === 'export' ? renderAdminExport() : ''}
     ${adminTab === 'duplicates' ? renderAdminDuplicates() : ''}
   `;
@@ -4419,6 +4879,126 @@ function renderAdminEditor() {
       </div>
     </div>
   `;
+}
+
+function renderAdminProfileTypes() {
+  const profileTypes = D.settings.profile_types || [];
+  return `
+    <div class="profile-type-admin-list">
+      ${profileTypes.map(type => `
+        <div class="admin-card profile-type-admin-card">
+          <div class="form-field">
+            <label class="form-label">Label</label>
+            <input class="legacy-input" value="${escapeHtml(type.label)}" onchange="updateProfileType('${type.id}', 'label', this.value)">
+          </div>
+          <div class="form-field">
+            <label class="form-label">Description</label>
+            <textarea class="legacy-textarea" onchange="updateProfileType('${type.id}', 'description', this.value)">${escapeHtml(type.description || '')}</textarea>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Story Prompts</label>
+            ${(type.prompts || []).map((prompt, index) => `
+              <div class="profile-prompt-row">
+                <input class="legacy-input" value="${escapeHtml(prompt)}" onchange="updateProfilePrompt('${type.id}', ${index}, this.value)">
+                <button class="duplicate-btn" type="button" onclick="removeProfilePrompt('${type.id}', ${index})">Remove</button>
+              </div>
+            `).join('')}
+            <button class="export-btn" type="button" onclick="addProfilePrompt('${type.id}')">Add Prompt</button>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Show Fields</label>
+            <div class="profile-field-toggles">
+              ${['bio','story','event','photo'].map(field => `
+                <label class="profile-field-toggle">
+                  <input type="checkbox" ${(type.show_fields || []).includes(field) ? 'checked' : ''} onchange="toggleProfileTypeField('${type.id}', '${field}', this.checked)">
+                  ${field[0].toUpperCase() + field.slice(1)}
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div class="admin-action-row">
+            ${profileTypePendingDeleteId === type.id ? `
+              <span class="inline-message error" style="margin:0;">Delete ${escapeHtml(type.label)}?</span>
+              <button class="duplicate-btn" type="button" onclick="confirmDeleteProfileType('${type.id}')">Yes, delete</button>
+              <button class="duplicate-btn" type="button" onclick="cancelDeleteProfileType()">Cancel</button>
+            ` : `<button class="duplicate-btn" type="button" onclick="requestDeleteProfileType('${type.id}')">Delete Type</button>`}
+          </div>
+        </div>
+      `).join('')}
+      <button class="export-btn" type="button" onclick="addProfileType()">Add Profile Type</button>
+    </div>
+  `;
+}
+
+function getProfileType(id) {
+  return (D.settings.profile_types || []).find(type => type.id === id);
+}
+
+function updateProfileType(id, field, value) {
+  const type = getProfileType(id);
+  if (!type) return;
+  type[field] = value.trim();
+  renderAdmin();
+}
+
+function updateProfilePrompt(id, index, value) {
+  const type = getProfileType(id);
+  if (!type) return;
+  type.prompts[index] = value.trim();
+  renderAdmin();
+}
+
+function addProfilePrompt(id) {
+  const type = getProfileType(id);
+  if (!type) return;
+  type.prompts.push('Add a family memory prompt here.');
+  renderAdmin();
+}
+
+function removeProfilePrompt(id, index) {
+  const type = getProfileType(id);
+  if (!type) return;
+  type.prompts.splice(index, 1);
+  renderAdmin();
+}
+
+function toggleProfileTypeField(id, field, checked) {
+  const type = getProfileType(id);
+  if (!type) return;
+  const fields = new Set(type.show_fields || []);
+  if (checked) fields.add(field);
+  else fields.delete(field);
+  type.show_fields = [...fields];
+  renderAdmin();
+}
+
+function addProfileType() {
+  const id = `profile_type_${Date.now()}`;
+  D.settings.profile_types.push({
+    id,
+    label: 'New Profile Type',
+    description: 'Describe who this option is for.',
+    prompts: ['What family memory would you like to preserve?'],
+    show_fields: ['bio', 'story', 'event', 'photo']
+  });
+  renderAdmin();
+}
+
+function requestDeleteProfileType(id) {
+  profileTypePendingDeleteId = id;
+  renderAdmin();
+}
+
+function cancelDeleteProfileType() {
+  profileTypePendingDeleteId = null;
+  renderAdmin();
+}
+
+function confirmDeleteProfileType(id) {
+  D.settings.profile_types = (D.settings.profile_types || []).filter(type => type.id !== id);
+  if (selectedProfileType === id) selectedProfileType = null;
+  profileTypePendingDeleteId = null;
+  renderAdmin();
 }
 
 function setAdminEditorType(type) {
@@ -4940,6 +5520,9 @@ document.addEventListener('keydown', e => {
 // INIT
 // ============================================================
 renderHome();
+if (window.location.hash.toLowerCase() === '#contribute') {
+  showPage('contribute');
+}
 </script>
 </body>
 </html>

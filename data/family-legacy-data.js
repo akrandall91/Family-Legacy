@@ -605,8 +605,69 @@ const FamilyData = {
 
   // --------------------------------------------------------
   // SETTINGS
-  // Reserved for future site-wide config (e.g. default privacy
-  // level for new submissions, feature flags for Phase 2 integrations).
+  // Site-wide configuration for lightweight admin tools and the
+  // guided contribution flow.
   // --------------------------------------------------------
-  settings: {}
+  settings: {
+    // WARNING: this is only a casual-visitor deterrent. This is a public
+    // static site, so anyone can read this password in the source.
+    admin_password: "Nipsey2020",
+    profile_types: [
+      {
+        id: "elder",
+        label: "Elder",
+        description: "A family elder preserving first-hand memories and earlier generations.",
+        prompts: [
+          "What family tradition do you most want younger generations to remember?",
+          "Who shaped your childhood, and what were they like?",
+          "What story has been told in the family for as long as you can remember?"
+        ],
+        show_fields: ["bio", "story", "event", "photo"]
+      },
+      {
+        id: "parent_aunt_uncle",
+        label: "Parent / Aunt / Uncle",
+        description: "A bridge between generations with stories about siblings, parents, and children.",
+        prompts: [
+          "What is a favorite memory of growing up with your siblings or cousins?",
+          "What lesson from your parents has stayed with you?",
+          "Which family gathering still makes you smile?"
+        ],
+        show_fields: ["bio", "story", "event", "photo"]
+      },
+      {
+        id: "grandchild_younger",
+        label: "Grandchild / Younger Family",
+        description: "A younger family member adding present-day memories and questions.",
+        prompts: [
+          "What is something an older relative taught you?",
+          "Which family story would you like to know more about?",
+          "What recent memory should become part of the family archive?"
+        ],
+        show_fields: ["bio", "story", "photo"]
+      },
+      {
+        id: "in_law",
+        label: "In-law",
+        description: "A family member by marriage sharing an outside-in view of family life.",
+        prompts: [
+          "What first made you feel welcomed into the family?",
+          "Which tradition or family personality stood out to you?",
+          "What memory best captures this family from your point of view?"
+        ],
+        show_fields: ["bio", "story", "event", "photo"]
+      },
+      {
+        id: "other",
+        label: "Other / Not Sure",
+        description: "A friend, researcher, or family member who is not sure which category fits.",
+        prompts: [
+          "What connection do you have to the Rowe family?",
+          "What person, place, or event would you like to add?",
+          "What detail do you think the family archive should preserve?"
+        ],
+        show_fields: ["bio", "story", "event", "photo"]
+      }
+    ]
+  }
 };
