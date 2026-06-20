@@ -2153,6 +2153,23 @@ img { max-width: 100%; }
   color: var(--sepia);
 }
 
+.date-entry {
+  display: grid;
+  gap: 10px;
+}
+
+.date-approx-fields {
+  grid-template-columns: minmax(120px, .7fr) minmax(180px, 1fr);
+  gap: 10px;
+}
+
+.date-approx-fields:not([hidden]) { display: grid; }
+
+input[type="date"].legacy-input {
+  color-scheme: light;
+  min-height: 48px;
+}
+
 .admin-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -2847,17 +2864,19 @@ body,
             <label class="form-label" for="person-nickname">Nickname</label>
             <input class="legacy-input" id="person-nickname" type="text">
           </div>
-          <div class="form-field">
-            <label class="form-label" for="person-birth-year">Birth Year</label>
-            <input class="legacy-input" id="person-birth-year" type="number" min="0" step="1" placeholder="e.g. 1947">
-          </div>
-          <div class="form-field">
-            <label class="form-label" for="person-birth-certainty">Birth Certainty</label>
-            <select class="legacy-select" id="person-birth-certainty">
-              <option value="exact">Exact</option>
-              <option value="estimated">Estimated</option>
-              <option value="unknown">Unknown</option>
-            </select>
+          <div class="form-field full">
+            <label class="form-label">Birth Date</label>
+            <div class="date-entry" data-date-entry="person-birth">
+              <input class="legacy-input date-exact-input" id="person-birth-date" type="date">
+              <label class="profile-field-toggle"><input type="checkbox" id="person-birth-approximate" onchange="toggleDateMode('person-birth')"> I don't know the exact date</label>
+              <div class="date-approx-fields" id="person-birth-approx-fields" hidden>
+                <input class="legacy-input" id="person-birth-year" type="number" min="1000" max="9999" placeholder="Year">
+                <select class="legacy-select" id="person-birth-month">
+                  <option value="">Month unknown</option>
+                  ${['January','February','March','April','May','June','July','August','September','October','November','December'].map((month, index) => `<option value="${String(index + 1).padStart(2, '0')}">${month}</option>`).join('')}
+                </select>
+              </div>
+            </div>
           </div>
           <div class="form-field full">
             <label class="form-label" for="person-birth-location">Birth Location</label>
@@ -2914,17 +2933,19 @@ body,
             <label class="form-label" for="event-description">Description</label>
             <textarea class="legacy-textarea" id="event-description" placeholder="What happened, and why does it matter?"></textarea>
           </div>
-          <div class="form-field">
-            <label class="form-label" for="event-date">Date</label>
-            <input class="legacy-input" id="event-date" type="text" placeholder="June 1942">
-          </div>
-          <div class="form-field">
-            <label class="form-label" for="event-date-certainty">Date Certainty</label>
-            <select class="legacy-select" id="event-date-certainty">
-              <option value="exact">Exact</option>
-              <option value="estimated">Estimated</option>
-              <option value="unknown">Unknown</option>
-            </select>
+          <div class="form-field full">
+            <label class="form-label">Event Date</label>
+            <div class="date-entry" data-date-entry="event-date">
+              <input class="legacy-input date-exact-input" id="event-date-exact" type="date">
+              <label class="profile-field-toggle"><input type="checkbox" id="event-date-approximate" onchange="toggleDateMode('event-date')"> I don't know the exact date</label>
+              <div class="date-approx-fields" id="event-date-approx-fields" hidden>
+                <input class="legacy-input" id="event-date-year" type="number" min="1000" max="9999" placeholder="Year">
+                <select class="legacy-select" id="event-date-month">
+                  <option value="">Month unknown</option>
+                  ${['January','February','March','April','May','June','July','August','September','October','November','December'].map((month, index) => `<option value="${String(index + 1).padStart(2, '0')}">${month}</option>`).join('')}
+                </select>
+              </div>
+            </div>
           </div>
           <div class="form-field full">
             <label class="form-label">People Involved</label>
@@ -3328,6 +3349,7 @@ let adminEditorRecordId = '';
 let adminEditorOriginal = '';
 let adminDismissedDuplicates = new Set();
 let editDataType = 'persons';
+let editDataRecordId = '';
 let selectedProfileType = null;
 let profileTypePendingDeleteId = null;
 let familyAdminPendingDeleteId = null;
@@ -4299,6 +4321,29 @@ function setToggleValue(inputId, value, btn) {
   btn.classList.add('active');
 }
 
+function toggleDateMode(prefix) {
+  const approximate = document.getElementById(`${prefix}-approximate`);
+  const exact = document.getElementById(prefix === 'event-date' ? 'event-date-exact' : `${prefix}-date`);
+  const approximateFields = document.getElementById(`${prefix}-approx-fields`);
+  if (!approximate || !exact || !approximateFields) return;
+  exact.disabled = approximate.checked;
+  approximateFields.hidden = !approximate.checked;
+}
+
+function readDateEntry(prefix) {
+  const approximate = document.getElementById(`${prefix}-approximate`)?.checked;
+  const exactId = prefix === 'event-date' ? 'event-date-exact' : `${prefix}-date`;
+  const exact = document.getElementById(exactId)?.value || '';
+  if (!approximate) {
+    return { value: exact || '0000-00-00', display: exact || 'Unknown', certainty: exact ? 'exact' : 'unknown' };
+  }
+  const year = document.getElementById(prefix === 'event-date' ? 'event-date-year' : `${prefix}-year`)?.value.trim() || '';
+  const month = document.getElementById(prefix === 'event-date' ? 'event-date-month' : `${prefix}-month`)?.value || '';
+  const value = year ? `${year}-${month || '00'}-00` : '0000-00-00';
+  const monthName = month ? new Date(2000, Number(month) - 1, 1).toLocaleString('en', { month: 'long' }) : '';
+  return { value, display: year ? `${monthName ? monthName + ' ' : ''}${year}` : 'Unknown', certainty: year ? 'estimated' : 'unknown' };
+}
+
 function renderPersonPicker(kind) {
   const mount = document.getElementById(`person-picker-${kind}`);
   if (!mount) return;
@@ -4405,8 +4450,9 @@ function submitPersonForm(event) {
 
   const maiden = document.getElementById('person-maiden-name').value.trim();
   const nickname = document.getElementById('person-nickname').value.trim();
-  const birthYear = document.getElementById('person-birth-year').value.trim();
-  const birthCertainty = document.getElementById('person-birth-certainty').value;
+  const birthDate = readDateEntry('person-birth');
+  const birthYear = getDateYear(birthDate.value) || '';
+  const birthCertainty = birthDate.certainty;
   const birthLocation = document.getElementById('person-birth-location').value.trim();
   const isLiving = document.getElementById('person-living').value === 'true';
   const bio = document.getElementById('person-bio').value.trim();
@@ -4429,10 +4475,10 @@ function submitPersonForm(event) {
       nicknames: nickname ? [nickname] : [],
       display: `${first} ${last}`
     },
-    birth: birthYear || birthLocation ? {
-      date: birthYear ? `${birthYear}-00-00` : '0000-00-00',
-      display: birthYear ? String(birthYear) : 'Unknown',
-      certainty: birthYear ? birthCertainty : 'unknown',
+    birth: birthDate.value !== '0000-00-00' || birthLocation ? {
+      date: birthDate.value,
+      display: birthDate.display,
+      certainty: birthDate.certainty,
       location_id: locationId
     } : null,
     death: null,
@@ -4468,6 +4514,7 @@ function submitPersonForm(event) {
     submittedEmail: ''
   });
   document.querySelector('#contribute-panel-person form').reset();
+  toggleDateMode('person-birth');
   document.getElementById('person-living').value = 'true';
   document.querySelectorAll('#person-living-toggle .legacy-toggle-btn').forEach(button => button.classList.remove('active'));
   document.querySelector('#person-living-toggle .legacy-toggle-btn').classList.add('active');
@@ -4486,8 +4533,9 @@ function submitEventForm(event) {
   }
 
   const description = document.getElementById('event-description').value.trim();
-  const dateDisplay = document.getElementById('event-date').value.trim();
-  const dateCertainty = document.getElementById('event-date-certainty').value;
+  const eventDate = readDateEntry('event-date');
+  const dateDisplay = eventDate.display;
+  const dateCertainty = eventDate.certainty;
   const selectedPeople = pickerState.event.selected.slice();
   const location = document.getElementById('event-location').value.trim();
   const recurring = document.getElementById('event-recurring').value === 'true';
@@ -4502,7 +4550,7 @@ function submitEventForm(event) {
 
   const selectedPersonObjects = selectedPeople.map(getPerson).filter(Boolean);
   const branchIds = [...new Set(selectedPersonObjects.flatMap(person => person.branch_ids || []))];
-  const dateStart = parseLooseDateToStart(dateDisplay);
+  const dateStart = eventDate.value;
   const [year, month, day] = (dateStart || '0000-00-00').split('-').map(part => parseInt(part, 10));
 
   const createdEvent = {
@@ -4543,6 +4591,7 @@ function submitEventForm(event) {
     submittedEmail: ''
   });
   document.querySelector('#contribute-panel-event form').reset();
+  toggleDateMode('event-date');
   pickerState.event.selected = [];
   pickerState.event.query = '';
   document.getElementById('event-recurring').value = 'false';
@@ -4581,6 +4630,7 @@ function submitStoryForm(event) {
     title,
     body,
     people_ids: peopleIds,
+    branch_ids: [...new Set(peopleIds.map(getPerson).filter(Boolean).flatMap(person => person.branch_ids || []))],
     event_ids: [],
     era,
     told_by: toldById,
@@ -4934,13 +4984,222 @@ function renderPersonPage() {
 // ============================================================
 // ADMIN
 // ============================================================
+const RECORD_SCHEMAS = {
+  persons: [
+    { path: 'name.first', label: 'First Name', type: 'text' },
+    { path: 'name.middle', label: 'Middle Name', type: 'text' },
+    { path: 'name.last', label: 'Last Name', type: 'text' },
+    { path: 'name.maiden', label: 'Maiden Name', type: 'text' },
+    { path: 'name.nicknames', label: 'Nicknames', type: 'list' },
+    { path: 'birth', label: 'Birth Date', type: 'date', shape: 'person' },
+    { path: 'death', label: 'Death Date', type: 'date', shape: 'person' },
+    { path: 'gender', label: 'Gender', type: 'select', options: ['female','male','nonbinary','unknown'] },
+    { path: 'is_living', label: 'Living', type: 'toggle' },
+    { path: 'bio', label: 'Biography', type: 'textarea', full: true },
+    { path: 'branch_ids', label: 'Branches', type: 'branches', full: true },
+    { path: 'relationships.parents', label: 'Parents', type: 'persons', full: true },
+    { path: 'relationships.spouses', label: 'Spouses', type: 'spouses', full: true },
+    { path: 'relationships.children', label: 'Children', type: 'persons', full: true },
+    { path: 'privacy', label: 'Privacy', type: 'select', options: ['public','family','private','admin'] },
+    { path: 'status', label: 'Review Status', type: 'select', options: ['draft','submitted','approved','published','archived'] },
+    { path: 'confidence', label: 'Confidence (0–1)', type: 'number' }
+  ],
+  branches: [
+    { path: 'name', label: 'Branch Name', type: 'text' },
+    { path: 'root_person_id', label: 'Root Person', type: 'person' },
+    { path: 'parent_branch_id', label: 'Parent Branch', type: 'branch' },
+    { path: 'child_branch_ids', label: 'Child Branches', type: 'branches', full: true },
+    { path: 'color', label: 'Accent Color', type: 'color' },
+    { path: 'description', label: 'Description', type: 'textarea', full: true }
+  ],
+  events: [
+    { path: 'title', label: 'Title', type: 'text' },
+    { path: 'type', label: 'Event Type', type: 'select', options: ['birth','death','wedding','reunion','military','graduation','migration','church','homegoing','milestone','other'] },
+    { path: 'date', label: 'Event Date', type: 'date', shape: 'event', full: true },
+    { path: 'description', label: 'Description', type: 'textarea', full: true },
+    { path: 'people', label: 'People Involved', type: 'personRoles', full: true },
+    { path: 'branch_ids', label: 'Branches', type: 'branches', full: true },
+    { path: 'location_id', label: 'Location', type: 'location' },
+    { path: 'privacy', label: 'Privacy', type: 'select', options: ['public','family','private','admin'] },
+    { path: 'status', label: 'Review Status', type: 'select', options: ['draft','submitted','approved','published','archived'] }
+  ],
+  stories: [
+    { path: 'title', label: 'Title', type: 'text' },
+    { path: 'body', label: 'Story', type: 'textarea', full: true },
+    { path: 'era', label: 'Era', type: 'text' },
+    { path: 'people_ids', label: 'People Mentioned', type: 'persons', full: true },
+    { path: 'branch_ids', label: 'Branches', type: 'branches', full: true },
+    { path: 'told_by', label: 'Told By', type: 'person' },
+    { path: 'told_date', label: 'Told Date', type: 'plainDate' },
+    { path: 'status', label: 'Status', type: 'select', options: ['draft','submitted','approved','published','archived'] },
+    { path: 'privacy', label: 'Privacy', type: 'select', options: ['public','family','private','admin'] }
+  ],
+  media: [
+    { path: 'title', label: 'Title', type: 'text' },
+    { path: 'type', label: 'Media Type', type: 'select', options: ['photo','video','audio','document'] },
+    { path: 'description', label: 'Description', type: 'textarea', full: true },
+    { path: 'date', label: 'Media Date', type: 'date', shape: 'media' },
+    { path: 'people_ids', label: 'People', type: 'persons', full: true },
+    { path: 'branch_ids', label: 'Branches', type: 'branches', full: true },
+    { path: 'location_id', label: 'Location', type: 'location' },
+    { path: 'privacy', label: 'Privacy', type: 'select', options: ['public','family','private','admin'] }
+  ],
+  locations: [
+    { path: 'name', label: 'Full Place Name', type: 'text' },
+    { path: 'short', label: 'Short Label', type: 'text' }
+  ],
+  sources: [
+    { path: 'title', label: 'Source Title', type: 'text' },
+    { path: 'type', label: 'Source Type', type: 'select', options: ['census','family_bible','obituary','birth_certificate','death_certificate','marriage_record','interview','photo','document','other'] },
+    { path: 'date', label: 'Source Date', type: 'plainDate' },
+    { path: 'location', label: 'Location', type: 'location' },
+    { path: 'drive_file_id', label: 'Drive File ID', type: 'text' },
+    { path: 'notes', label: 'Notes', type: 'textarea', full: true },
+    { path: 'reliability', label: 'Reliability (0–1)', type: 'number' }
+  ]
+};
+
+function getNestedValue(object, path) {
+  return path.split('.').reduce((value, key) => value == null ? undefined : value[key], object);
+}
+
+function setNestedValue(object, path, value) {
+  const keys = path.split('.');
+  let target = object;
+  keys.slice(0, -1).forEach(key => {
+    if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+    target = target[key];
+  });
+  target[keys.at(-1)] = value;
+}
+
+function getEditorRecords(type) {
+  if (type === 'locations') return Object.entries(D.locations).map(([id, value]) => ({ id, ...value }));
+  return type === adminEditorType && currentUserRole === 'family_admin' ? scopedRecords(type) : (D[type] || []);
+}
+
+function renderChoiceChecks(path, values, options, labelKey = 'name') {
+  const selected = new Set(values || []);
+  return `<div class="profile-field-toggles structured-check-grid">${options.map(option => `<label class="profile-field-toggle"><input type="checkbox" data-multi-field="${path}" value="${option.id}" ${selected.has(option.id) ? 'checked' : ''}> ${escapeHtml(labelKey === 'name' ? option.name?.display || option.name : option.label)}</label>`).join('')}</div>`;
+}
+
+function normalizeDateForForm(value, shape) {
+  const stored = shape === 'event' ? value?.start : shape === 'media' ? value?.value : value?.date;
+  const certainty = value?.certainty || 'unknown';
+  const match = String(stored || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return { exact: certainty === 'exact' && match && !stored.includes('00') ? stored : '', approximate: certainty !== 'exact', year: match && match[1] !== '0000' ? match[1] : '', month: match && match[2] !== '00' ? match[2] : '' };
+}
+
+function renderStructuredField(field, record, context) {
+  const value = getNestedValue(record, field.path);
+  const full = field.full ? ' full' : '';
+  const base = `<label class="form-label">${escapeHtml(field.label)}</label>`;
+  if (field.type === 'textarea') return `<div class="form-field${full}">${base}<textarea class="legacy-textarea" data-field="${field.path}">${escapeHtml(value || '')}</textarea></div>`;
+  if (field.type === 'select') return `<div class="form-field${full}">${base}<select class="legacy-select" data-field="${field.path}">${field.options.map(option => `<option value="${option}" ${value === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select></div>`;
+  if (field.type === 'toggle') return `<div class="form-field${full}">${base}<label class="profile-field-toggle"><input type="checkbox" data-field="${field.path}" data-field-type="toggle" ${value ? 'checked' : ''}> Yes</label></div>`;
+  if (field.type === 'list') return `<div class="form-field${full}">${base}<input class="legacy-input" data-field="${field.path}" data-field-type="list" value="${escapeHtml((value || []).join(', '))}"></div>`;
+  if (field.type === 'number') return `<div class="form-field${full}">${base}<input class="legacy-input" type="number" step="0.01" data-field="${field.path}" data-field-type="number" value="${value ?? ''}"></div>`;
+  if (field.type === 'color') return `<div class="form-field${full}">${base}<input class="legacy-input" type="color" data-field="${field.path}" value="${escapeHtml(value || '#a4674d')}"></div>`;
+  if (field.type === 'person') return `<div class="form-field${full}">${base}<select class="legacy-select" data-field="${field.path}"><option value="">None</option>${D.persons.map(person => `<option value="${person.id}" ${value === person.id ? 'selected' : ''}>${escapeHtml(person.name.display)}</option>`).join('')}</select></div>`;
+  if (field.type === 'branch') return `<div class="form-field${full}">${base}<select class="legacy-select" data-field="${field.path}"><option value="">None</option>${D.branches.map(branch => `<option value="${branch.id}" ${value === branch.id ? 'selected' : ''}>${escapeHtml(branch.name)}</option>`).join('')}</select></div>`;
+  if (field.type === 'location') return `<div class="form-field${full}">${base}<select class="legacy-select" data-field="${field.path}"><option value="">None</option>${Object.entries(D.locations).map(([id, location]) => `<option value="${id}" ${value === id ? 'selected' : ''}>${escapeHtml(location.name || location.short || id)}</option>`).join('')}</select></div>`;
+  if (field.type === 'persons') return `<div class="form-field${full}">${base}${renderChoiceChecks(field.path, value, D.persons)}</div>`;
+  if (field.type === 'branches') return `<div class="form-field${full}">${base}${renderChoiceChecks(field.path, value, D.branches.map(branch => ({ id: branch.id, label: branch.name })), 'label')}</div>`;
+  if (field.type === 'personRoles') return `<div class="form-field${full}">${base}${renderChoiceChecks(field.path, (value || []).map(item => item.person_id), D.persons)}</div>`;
+  if (field.type === 'spouses') return `<div class="form-field${full}">${base}${renderChoiceChecks(field.path, (value || []).map(item => item.person_id), D.persons)}</div>`;
+  if (field.type === 'plainDate') return `<div class="form-field${full}">${base}<input class="legacy-input" type="date" data-field="${field.path}" value="${String(value || '').replace(/-00/g, '-01')}"></div>`;
+  if (field.type === 'date') {
+    const date = normalizeDateForForm(value, field.shape);
+    const prefix = `${context}-${field.path.replace(/\./g, '-')}`;
+    return `<div class="form-field${full}">${base}<div class="date-entry" data-structured-date="${field.path}" data-date-shape="${field.shape}" data-date-prefix="${prefix}">
+      <input class="legacy-input structured-date-exact" type="date" value="${date.exact}" ${date.approximate ? 'disabled' : ''}>
+      <label class="profile-field-toggle"><input class="structured-date-approximate" type="checkbox" ${date.approximate ? 'checked' : ''} onchange="toggleStructuredDate(this)"> I don't know the exact date</label>
+      <div class="date-approx-fields" ${date.approximate ? '' : 'hidden'}><input class="legacy-input structured-date-year" type="number" min="1000" max="9999" placeholder="Year" value="${date.year}"><select class="legacy-select structured-date-month"><option value="">Month unknown</option>${['January','February','March','April','May','June','July','August','September','October','November','December'].map((month, index) => { const monthValue = String(index + 1).padStart(2, '0'); return `<option value="${monthValue}" ${date.month === monthValue ? 'selected' : ''}>${month}</option>`; }).join('')}</select></div>
+    </div></div>`;
+  }
+  return `<div class="form-field${full}">${base}<input class="legacy-input" data-field="${field.path}" value="${escapeHtml(value ?? '')}"></div>`;
+}
+
+function toggleStructuredDate(checkbox) {
+  const entry = checkbox.closest('[data-structured-date]');
+  entry.querySelector('.structured-date-exact').disabled = checkbox.checked;
+  entry.querySelector('.date-approx-fields').hidden = !checkbox.checked;
+}
+
+function renderStructuredRecordForm(type, record, context) {
+  if (!record) return '<div class="empty-state">No records are available for this type.</div>';
+  return `<form id="${context}-structured-form" onsubmit="saveStructuredRecord(event,'${context}','${type}','${record.id}')"><div class="contribute-form-grid">${(RECORD_SCHEMAS[type] || []).map(field => renderStructuredField(field, record, context)).join('')}</div><div class="admin-action-row" style="margin-top:22px;"><button class="export-btn" type="submit">Save Changes</button></div></form>`;
+}
+
+function collectStructuredRecord(form, type, original) {
+  const record = structuredClone(original);
+  (RECORD_SCHEMAS[type] || []).forEach(field => {
+    if (field.type === 'date') {
+      const entry = form.querySelector(`[data-structured-date="${field.path}"]`);
+      const approximate = entry.querySelector('.structured-date-approximate').checked;
+      const exact = entry.querySelector('.structured-date-exact').value;
+      const year = entry.querySelector('.structured-date-year').value;
+      const month = entry.querySelector('.structured-date-month').value;
+      const stored = approximate ? (year ? `${year}-${month || '00'}-00` : '0000-00-00') : (exact || '0000-00-00');
+      const certainty = approximate ? (year ? 'estimated' : 'unknown') : (exact ? 'exact' : 'unknown');
+      const display = stored === '0000-00-00' ? 'Unknown' : stored;
+      setNestedValue(record, field.path, field.shape === 'event' ? { ...(getNestedValue(record, field.path) || {}), start: stored, display, certainty } : field.shape === 'media' ? { ...(getNestedValue(record, field.path) || {}), value: stored, display, certainty } : { ...(getNestedValue(record, field.path) || {}), date: stored, display, certainty });
+      return;
+    }
+    if (['persons','branches','personRoles','spouses'].includes(field.type)) {
+      const values = [...form.querySelectorAll(`[data-multi-field="${field.path}"]:checked`)].map(input => input.value);
+      setNestedValue(record, field.path, field.type === 'personRoles' ? values.map(person_id => ({ person_id, role: 'participant' })) : field.type === 'spouses' ? values.map(person_id => ({ person_id, relationship_id: `rel_${[record.id, person_id].sort().join('_')}` })) : values);
+      return;
+    }
+    const input = form.querySelector(`[data-field="${field.path}"]`);
+    if (!input) return;
+    let value = input.dataset.fieldType === 'toggle' ? input.checked : input.value;
+    if (input.dataset.fieldType === 'list') value = input.value.split(',').map(item => item.trim()).filter(Boolean);
+    if (input.dataset.fieldType === 'number') value = input.value === '' ? null : Number(input.value);
+    setNestedValue(record, field.path, value === '' && ['name.maiden','parent_branch_id','location_id','told_by'].includes(field.path) ? null : value);
+  });
+  if (type === 'persons') record.name.display = [record.name.first, record.name.last].filter(Boolean).join(' ');
+  return record;
+}
+
+function saveStructuredRecord(event, context, type, id) {
+  event.preventDefault();
+  const records = getEditorRecords(type);
+  const original = records.find(record => record.id === id);
+  if (!original) return;
+  const record = collectStructuredRecord(event.currentTarget, type, original);
+  if (currentUserRole === 'family_admin' && !recordInAdminScope(record)) {
+    (context === 'admin' ? setAdminEditorMessage : setEditDataMessage)('This record is not in your assigned branch.', 'error');
+    return;
+  }
+  if (type === 'locations') {
+    const { id: locationId, ...location } = record;
+    D.locations[locationId] = location;
+  } else {
+    const index = D[type].findIndex(item => item.id === id);
+    D[type][index] = record;
+  }
+  refreshAllDerivedViews();
+  if (context === 'admin') {
+    adminEditorRecordId = record.id;
+    renderAdmin();
+    setAdminEditorMessage('Record updated.');
+  } else {
+    editDataRecordId = record.id;
+    renderEditData();
+    setEditDataMessage('Record updated.');
+  }
+}
+
 function renderEditData() {
   const root = document.getElementById('edit-data-root');
   if (!root) return;
-  const value = D[editDataType] ?? (editDataType === 'locations' ? {} : []);
+  const records = getEditorRecords(editDataType);
+  if (!editDataRecordId || !records.some(record => record.id === editDataRecordId)) editDataRecordId = records[0]?.id || '';
+  const selected = records.find(record => record.id === editDataRecordId);
   root.innerHTML = `
     <div class="editor-shell">
-      <div class="admin-warning">Changes update this browser's live data only. Export the JavaScript file to save them back to the repository.</div>
+      <div class="admin-warning">Use the labeled fields below to update one record at a time. Export the JavaScript file to save changes back to the repository.</div>
       <div id="edit-data-message"></div>
       <div class="editor-controls">
         <select class="legacy-select" onchange="setEditDataType(this.value)">
@@ -4948,10 +5207,13 @@ function renderEditData() {
             `<option value="${type}" ${editDataType === type ? 'selected' : ''}>${type[0].toUpperCase() + type.slice(1)}</option>`
           ).join('')}
         </select>
+        <select class="legacy-select" onchange="setEditDataRecord(this.value)">
+          ${records.map(record => `<option value="${record.id}" ${selected?.id === record.id ? 'selected' : ''}>${escapeHtml(record.name?.display || record.name || record.title || record.id)}</option>`).join('')}
+        </select>
       </div>
-      <textarea id="edit-data-json" class="legacy-textarea editor-textarea">${escapeHtml(JSON.stringify(value, null, 2))}</textarea>
+      ${renderStructuredRecordForm(editDataType, selected, 'edit-data')}
       <div class="admin-action-row" style="margin-top:14px;">
-        <button class="export-btn" type="button" onclick="saveEditData()">Save to live data</button>
+        <button class="export-btn" type="button" onclick="createStructuredRecord('${editDataType}')">Add ${escapeHtml(editDataType.slice(0, -1) || editDataType)}</button>
         <button class="export-btn" type="button" onclick="exportFamilyDataJs()">Export updated family-legacy-data.js</button>
       </div>
     </div>
@@ -4960,32 +5222,37 @@ function renderEditData() {
 
 function setEditDataType(type) {
   editDataType = type;
+  editDataRecordId = '';
+  renderEditData();
+}
+
+function setEditDataRecord(id) {
+  editDataRecordId = id;
+  renderEditData();
+}
+
+function createStructuredRecord(type) {
+  const id = `${type.slice(0, -1)}_${Date.now()}`;
+  const defaults = {
+    persons: { id, name: { first: '', middle: '', last: '', maiden: null, nicknames: [], display: 'New Person' }, birth: null, death: null, gender: 'unknown', is_living: true, relationships: { parents: [], spouses: [], children: [] }, branch_ids: [D.meta.root_branch_id], bio: '', cover_media_id: null, tags: [], confidence: 0.5, sources: [], privacy: 'family', status: 'draft' },
+    branches: { id, name: 'New Branch', root_person_id: '', parent_branch_id: D.meta.root_branch_id, child_branch_ids: [], color: '#a4674d', description: '' },
+    events: { id, type: 'other', title: 'New Event', description: '', date: { start: '0000-00-00', display: 'Unknown', certainty: 'unknown', end: null }, recurrence: { type: 'none' }, people: [], branch_ids: [D.meta.root_branch_id], location_id: null, media_ids: [], tags: [], sources: [], privacy: 'family', status: 'draft' },
+    stories: { id, type: 'written', title: 'New Story', body: '', people_ids: [], branch_ids: [D.meta.root_branch_id], event_ids: [], era: '', told_by: null, told_date: '', media_id: null, tags: [], status: 'draft', privacy: 'family' },
+    media: { id, type: 'photo', title: 'New Media', description: '', storage: { type: 'placeholder', url: null, color: '#a4674d' }, date: { value: '0000-00-00', certainty: 'unknown', display: 'Unknown' }, people_ids: [], event_ids: [], branch_ids: [D.meta.root_branch_id], location_id: null, tags: [], privacy: 'family' },
+    sources: { id, title: 'New Source', type: 'other', date: '', location: null, drive_file_id: '', notes: '', reliability: 0.5 }
+  };
+  if (type === 'locations') {
+    D.locations[id] = { name: 'New Location', short: 'New Location' };
+  } else {
+    D[type].push(defaults[type]);
+  }
+  editDataRecordId = id;
   renderEditData();
 }
 
 function setEditDataMessage(message, status = 'success') {
   const el = document.getElementById('edit-data-message');
   if (el) el.innerHTML = `<div class="inline-message ${status}">${escapeHtml(message)}</div>`;
-}
-
-function saveEditData() {
-  const textarea = document.getElementById('edit-data-json');
-  if (!textarea) return;
-  try {
-    const parsed = JSON.parse(textarea.value);
-    if (editDataType === 'locations') {
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('Locations must be a JSON object keyed by location id.');
-      }
-    } else if (!Array.isArray(parsed)) {
-      throw new Error(`${editDataType} must be a JSON array.`);
-    }
-    D[editDataType] = parsed;
-    refreshAllDerivedViews();
-    setEditDataMessage(`${editDataType} updated in live data.`);
-  } catch (error) {
-    setEditDataMessage(error.message, 'error');
-  }
 }
 
 function serializeFamilyDataJs() {
@@ -5133,16 +5400,11 @@ function renderAdminOverview() {
 
 function renderAdminEditor() {
   const records = scopedRecords(adminEditorType);
-  if (!adminEditorRecordId && records[0]) {
-    adminEditorRecordId = records[0].id;
-    adminEditorOriginal = JSON.stringify(records[0], null, 2);
-  }
+  if (!adminEditorRecordId && records[0]) adminEditorRecordId = records[0].id;
   const selected = records.find(record => record.id === adminEditorRecordId) || records[0];
-  const value = selected ? JSON.stringify(selected, null, 2) : '';
-  adminEditorOriginal = selected ? JSON.stringify(selected, null, 2) : '';
   return `
     <div class="editor-shell">
-      <div class="admin-warning">Changes are in-memory only. Export JSON to save permanently.</div>
+      <div class="admin-warning">Changes are in-memory only until a Super Admin exports the updated data file.</div>
       <div id="admin-editor-message"></div>
       <div class="editor-controls">
         <select class="legacy-select" onchange="setAdminEditorType(this.value)">
@@ -5154,11 +5416,7 @@ function renderAdminEditor() {
           ${(records || []).map(record => `<option value="${record.id}" ${selected?.id === record.id ? 'selected' : ''}>${escapeHtml(record.name?.display || record.title || record.id)}</option>`).join('')}
         </select>
       </div>
-      <textarea id="admin-editor-json" class="legacy-textarea editor-textarea">${escapeHtml(value)}</textarea>
-      <div class="admin-action-row" style="margin-top:14px;">
-        <button class="export-btn" type="button" onclick="saveAdminRecord()">Save Changes</button>
-        <button class="export-btn" type="button" onclick="resetAdminRecord()">Reset</button>
-      </div>
+      ${renderStructuredRecordForm(adminEditorType, selected, 'admin')}
     </div>
   `;
 }
@@ -5394,7 +5652,6 @@ function setAdminEditorType(type) {
   adminEditorType = type;
   const records = scopedRecords(type);
   adminEditorRecordId = records[0]?.id || '';
-  adminEditorOriginal = records[0] ? JSON.stringify(records[0], null, 2) : '';
   renderAdmin();
 }
 
@@ -5406,32 +5663,6 @@ function setAdminEditorRecord(id) {
 function setAdminEditorMessage(message, status = 'success') {
   const el = document.getElementById('admin-editor-message');
   if (el) el.innerHTML = `<div class="inline-message ${status}">${escapeHtml(message)}</div>`;
-}
-
-function saveAdminRecord() {
-  const textarea = document.getElementById('admin-editor-json');
-  if (!textarea) return;
-  try {
-    const parsed = JSON.parse(textarea.value);
-    if (!parsed.id) throw new Error('Record must include an id field.');
-    if (!recordInAdminScope(parsed)) throw new Error('This record is not in your assigned branch.');
-    const records = D[adminEditorType];
-    const index = records.findIndex(record => record.id === adminEditorRecordId);
-    if (index === -1) throw new Error('Original record could not be found.');
-    records[index] = parsed;
-    adminEditorRecordId = parsed.id;
-    adminEditorOriginal = JSON.stringify(parsed, null, 2);
-    setAdminEditorMessage('Record updated in memory.');
-    refreshAllDerivedViews();
-  } catch (error) {
-    setAdminEditorMessage(error.message, 'error');
-  }
-}
-
-function resetAdminRecord() {
-  const textarea = document.getElementById('admin-editor-json');
-  if (textarea) textarea.value = adminEditorOriginal;
-  setAdminEditorMessage('Editor reset to the original JSON.');
 }
 
 function renderAdminExport() {
