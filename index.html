@@ -2437,8 +2437,8 @@ img { max-width: 100%; }
     <div class="home-hero">
       <div>
         <div class="home-eyebrow">Family Legacy Platform</div>
-        <h1 class="home-title" id="home-family-title">The <em>Randall</em><br>Family</h1>
-        <p class="home-tagline" id="home-tagline">Roots run deep. Stories live on.</p>
+        <h1 class="home-title" id="home-family-title">The <em>Rowe</em><br>Family</h1>
+        <p class="home-tagline" id="home-tagline">One root. Many branches.</p>
         <div class="home-stats" id="home-stats"></div>
       </div>
       <div class="anniversary-widget">
@@ -3069,8 +3069,11 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 function renderHome() {
   // Family name
   document.getElementById('nav-family-name').textContent = D.meta.family_name;
+  const familyTitleName = D.meta.family_name
+    .replace(/^The\s+/i, '')
+    .replace(/\s+Family$/i, '');
   document.getElementById('home-family-title').innerHTML =
-    'The <em>' + D.meta.family_name.split(' ')[0] + '</em><br>Family';
+    'The <em>' + familyTitleName + '</em><br>Family';
   document.getElementById('home-tagline').textContent = D.meta.tagline;
 
   // Stats
