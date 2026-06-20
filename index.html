@@ -2105,6 +2105,25 @@ img { max-width: 100%; }
   border-color: rgba(122,48,24,0.2);
 }
 
+.sync-status-banner {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1200;
+  max-width: 360px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: rgba(255,253,248,.96);
+  box-shadow: 0 8px 26px var(--shadow);
+  color: var(--dust);
+  font-size: 13px;
+  transition: opacity .25s;
+}
+.sync-status-banner.success { color: var(--sage); }
+.sync-status-banner.error { color: var(--rust); }
+.sync-status-banner:empty { display: none; }
+
 .admin-tabs {
   display: flex;
   gap: 8px;
@@ -2740,6 +2759,7 @@ body,
     <button class="nav-btn admin-btn" onclick="showPage('admin')">âš™ Admin</button>
   </div>
 </nav>
+<div id="sync-status-banner" class="sync-status-banner" role="status" aria-live="polite"></div>
 
 <!-- APP SHELL -->
 <div id="app">
@@ -2841,6 +2861,7 @@ body,
     <div id="contribute-profile-summary"></div>
     <div class="contribute-tabs">
       <button class="contribute-tab active" onclick="showContributeTab('person')">Add a Person</button>
+      <button class="contribute-tab" onclick="showContributeTab('note')">Add a Memory</button>
       <button class="contribute-tab" data-contribute-feature="event" onclick="showContributeTab('event')">Add an Event</button>
       <button class="contribute-tab" onclick="showContributeTab('story')">Submit a Story</button>
     </div>
@@ -2908,6 +2929,36 @@ body,
         </div>
       </form>
       <div id="contribute-success-person"></div>
+    </div>
+
+    <div class="contribute-panel" id="contribute-panel-note">
+      <form onsubmit="submitNoteForm(event)">
+        <div class="contribute-form-grid">
+          <div class="form-field full">
+            <label class="form-label">Who is this memory about? <span class="field-required">*</span></label>
+            <div id="person-picker-note"></div>
+            <div class="form-help">Choose one existing person. This adds a reviewable memory; it cannot change their profile.</div>
+          </div>
+          <div class="form-field full">
+            <label class="form-label" for="note-title">Memory Title</label>
+            <input class="legacy-input" id="note-title" type="text" placeholder="A short title">
+          </div>
+          <div class="form-field full">
+            <label class="form-label" for="note-body">Memory or Note <span class="field-required">*</span></label>
+            <textarea class="legacy-textarea" id="note-body" required placeholder="Share the memory in your own words."></textarea>
+          </div>
+          <div class="form-field full profile-photo-field">
+            <label class="form-label" for="note-photo-link">Photo Link</label>
+            <input class="legacy-input" id="note-photo-link" type="url" placeholder="Optional link to a related photo">
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="note-submitted-by">Your Name</label>
+            <input class="legacy-input" id="note-submitted-by" type="text">
+          </div>
+        </div>
+        <div style="margin-top:22px;"><button class="form-submit-btn" type="submit">Submit for Review</button></div>
+      </form>
+      <div id="contribute-success-note"></div>
     </div>
 
     <div class="contribute-panel" id="contribute-panel-event">
@@ -3084,7 +3135,7 @@ body,
 // ENGINE
 // ============================================================
 
-const D = FamilyData;
+let D = structuredClone(FamilyData);
 
 // Lookup helpers
 const getPerson = id => D.persons.find(p => p.id === id);
@@ -3295,6 +3346,123 @@ function downloadBlob(filename, content, type) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+const FAMILY_API_URL = 'https://script.google.com/macros/s/AKfycbwUf-D4OXHrmHeMazS_WhareKtJY_2X6g2rywzUCJlt1Ec6a6TelG6wswBMtkKD3G6wkA/exec';
+let centralDataAvailable = false;
+let syncStatusTimer = null;
+
+function showSyncStatus(message, status = '') {
+  const banner = document.getElementById('sync-status-banner');
+  if (!banner) return;
+  clearTimeout(syncStatusTimer);
+  banner.className = `sync-status-banner ${status}`.trim();
+  banner.textContent = message;
+  if (status === 'success') {
+    syncStatusTimer = setTimeout(() => { banner.textContent = ''; }, 3200);
+  }
+}
+
+async function familyApi(action, payload = null) {
+  const options = payload ? {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, ...payload })
+  } : {};
+  const url = payload ? FAMILY_API_URL : `${FAMILY_API_URL}?action=${encodeURIComponent(action)}`;
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`API request failed (${response.status})`);
+  const result = await response.json();
+  if (result.ok === false || result.error) throw new Error(result.error || 'API request failed');
+  return result;
+}
+
+async function loadCentralFamilyData() {
+  try {
+    const result = await familyApi('getAll');
+    if (!result.initialized || !Array.isArray(result.persons) || !result.meta?.family_name) {
+      throw new Error('Google Sheet is not initialized with family data');
+    }
+    D = result;
+    D.pendingSubmissions = result.pendingSubmissions || [];
+    centralDataAvailable = true;
+    showSyncStatus('Connected to the shared family archive.', 'success');
+  } catch (error) {
+    D = structuredClone(FamilyData);
+    D.pendingSubmissions = [];
+    centralDataAvailable = false;
+    showSyncStatus('Local/offline mode — shared changes are unavailable until Google Sheets is initialized.', 'error');
+  }
+}
+
+async function reloadCentralData() {
+  const result = await familyApi('getAll');
+  if (!result.initialized || !Array.isArray(result.persons)) throw new Error('Shared archive is not initialized');
+  D = result;
+  D.pendingSubmissions = result.pendingSubmissions || [];
+  centralDataAvailable = true;
+  refreshAllDerivedViews();
+  return D;
+}
+
+async function persistRecord(type, record) {
+  if (!centralDataAvailable) {
+    showSyncStatus('Saved locally only — the shared archive is unavailable.', 'error');
+    return false;
+  }
+  try {
+    await familyApi('saveRecord', { recordType: type, record });
+    showSyncStatus('Saved to the shared family archive.', 'success');
+    return true;
+  } catch (error) {
+    showSyncStatus('Save failed — check your connection before leaving this page.', 'error');
+    return false;
+  }
+}
+
+async function persistDelete(type, id) {
+  if (!centralDataAvailable) {
+    showSyncStatus('Deleted locally only — the shared archive is unavailable.', 'error');
+    return false;
+  }
+  try {
+    await familyApi('deleteRecord', { recordType: type, id });
+    showSyncStatus('Deletion saved to the shared family archive.', 'success');
+    return true;
+  } catch (error) {
+    showSyncStatus('Delete failed — check your connection.', 'error');
+    return false;
+  }
+}
+
+async function persistSettings() {
+  return persistRecord('settings', D.settings);
+}
+
+async function submitContribution(payload) {
+  if (!centralDataAvailable) {
+    try {
+      await fetch(FAMILY_API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      showSyncStatus('Sent to the legacy intake. Deploy the new Apps Script to enable central review.', 'success');
+      return { ok: true, legacy: true };
+    } catch (error) {
+      showSyncStatus('Submission failed — check your connection and try again.', 'error');
+      return null;
+    }
+  }
+  try {
+    const result = await familyApi('submitContribution', payload);
+    showSyncStatus('Submitted for family review.', 'success');
+    return result;
+  } catch (error) {
+    showSyncStatus('Submission failed — check your connection and try again.', 'error');
+    return null;
+  }
+}
+
 function resolveBranchForPerson(person) {
   const lastName = (person?.name?.last || '').toLowerCase();
   const matchedBranch = D.branches.find(branch => branch.name.toLowerCase().includes(lastName));
@@ -3359,7 +3527,8 @@ let currentUserBranchIds = [];
 let pageRevealObserver = null;
 const pickerState = {
   event: { selected: [], query: '' },
-  story: { selected: [], query: '' }
+  story: { selected: [], query: '' },
+  note: { selected: [], query: '' }
 };
 
 function pushHistoryState() {
@@ -3821,6 +3990,7 @@ function renderTree() {
     const color = getPersonColor(p);
     const g = nodeGroup.append('g')
       .attr('class', 'person-node')
+      .attr('data-person-id', p.id)
       .attr('transform', `translate(${node.x - CARD_W/2}, ${node.y - CARD_H/2})`)
       .attr('cursor', 'pointer')
       .on('click', () => openPersonProfile(p.id));
@@ -4220,6 +4390,7 @@ function renderContribute() {
   applyProfileTypeGuidance();
   renderPersonPicker('event');
   renderPersonPicker('story');
+  renderPersonPicker('note');
 }
 
 function renderProfileTypeStep() {
@@ -4401,7 +4572,10 @@ function togglePersonSelection(kind, personId) {
   const selected = pickerState[kind].selected;
   const index = selected.indexOf(personId);
   if (index >= 0) selected.splice(index, 1);
-  else selected.push(personId);
+  else {
+    if (kind === 'note') selected.splice(0, selected.length);
+    selected.push(personId);
+  }
   renderPersonPicker(kind);
 }
 
@@ -4409,10 +4583,9 @@ function showContributionSuccess(kind, title, object) {
   const container = document.getElementById(`contribute-success-${kind}`);
   if (!container) return;
   container.innerHTML = `
-    <div class="contribute-success">
+      <div class="contribute-success">
       <div class="contribute-success-title">${escapeHtml(title)}</div>
-      <div class="contribute-success-text">Saved into the live FamilyData object. You can copy the JSON below.</div>
-      <pre class="json-block">${escapeHtml(JSON.stringify(object, null, 2))}</pre>
+      <div class="contribute-success-text">Your contribution is safely queued for a Family Admin to review.</div>
     </div>
   `;
 }
@@ -4423,22 +4596,7 @@ function showContributionError(kind, message) {
   container.innerHTML = `<div class="inline-message error">${escapeHtml(message)}</div>`;
 }
 
-const GOOGLE_SHEETS_SUBMISSION_URL = 'https://script.google.com/macros/s/AKfycbwUf-D4OXHrmHeMazS_WhareKtJY_2X6g2rywzUCJlt1Ec6a6TelG6wswBMtkKD3G6wkA/exec';
-
-function sendSubmissionToGoogleSheets(payload) {
-  try {
-    fetch(GOOGLE_SHEETS_SUBMISSION_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    }).catch(() => {});
-  } catch (error) {
-    // Best effort only: the in-memory save and success message take priority.
-  }
-}
-
-function submitPersonForm(event) {
+async function submitPersonForm(event) {
   event.preventDefault();
 
   const first = document.getElementById('person-first-name').value.trim();
@@ -4459,70 +4617,78 @@ function submitPersonForm(event) {
   const photoLink = document.getElementById('person-photo-link').value.trim();
   const submittedBy = document.getElementById('person-submitted-by').value.trim() || 'anonymous';
 
-  let locationId = null;
-  if (birthLocation) {
-    locationId = buildLocationId('loc_user');
-    D.locations[locationId] = { name: birthLocation, short: birthLocation };
-  }
-
-  const person = {
-    id: `person_${Date.now()}`,
-    name: {
-      first,
-      middle: '',
-      last,
-      maiden: maiden || null,
-      nicknames: nickname ? [nickname] : [],
-      display: `${first} ${last}`
-    },
-    birth: birthDate.value !== '0000-00-00' || birthLocation ? {
-      date: birthDate.value,
-      display: birthDate.display,
-      certainty: birthDate.certainty,
-      location_id: locationId
-    } : null,
-    death: null,
-    gender: 'unknown',
-    is_living: isLiving,
-    relationships: { parents: [], spouses: [], children: [] },
-    branch_ids: resolveBranchForPerson({ name: { last } }),
-    bio,
-    cover_media_id: null,
-    tags: [submittedBy ? `submitted-by:${submittedBy}` : null].filter(Boolean),
-    confidence: 0.35,
-    sources: submittedBy ? [`Submitted by ${submittedBy}`] : [],
-    privacy: 'family',
-    submitted_by: submittedBy,
-    status: 'submitted'
-  };
-
-  D.persons.push(person);
-  sendSubmissionToGoogleSheets({
-    submissionType: 'person',
+  const proposedPerson = {
+    personId: `person_${Date.now()}`,
     firstName: first,
     lastName: last,
     maidenName: maiden,
     nickname,
-    relationship: selectedProfileType || '',
-    birthYear,
-    birthCertainty,
-    birthLocation,
+    birthDate: birthDate.value !== '0000-00-00' || birthLocation ? {
+      date: birthDate.value,
+      display: birthDate.display,
+      certainty: birthDate.certainty,
+      location_name: birthLocation || null,
+      location_id: null
+    } : null,
     living: isLiving,
     bio,
     photoLink,
+    branchIds: resolveBranchForPerson({ name: { last } }),
     submittedBy,
     submittedEmail: ''
+  };
+
+  const saved = await submitContribution({
+    submissionType: 'person',
+    ...proposedPerson,
+    relationship: selectedProfileType || '',
+    birthYear,
+    birthCertainty,
   });
+  if (!saved) {
+    showContributionError('person', 'This submission was not saved. Please check your connection and try again.');
+    return;
+  }
   document.querySelector('#contribute-panel-person form').reset();
   toggleDateMode('person-birth');
   document.getElementById('person-living').value = 'true';
   document.querySelectorAll('#person-living-toggle .legacy-toggle-btn').forEach(button => button.classList.remove('active'));
   document.querySelector('#person-living-toggle .legacy-toggle-btn').classList.add('active');
-  showContributionSuccess('person', `${person.name.display} added successfully.`, person);
-  refreshAllDerivedViews();
+  showContributionSuccess('person', `${first} ${last} was submitted for family review.`, proposedPerson);
 }
 
-function submitEventForm(event) {
+async function submitNoteForm(event) {
+  event.preventDefault();
+  const targetPersonId = pickerState.note.selected[0];
+  const noteBody = document.getElementById('note-body').value.trim();
+  if (!targetPersonId || !noteBody) {
+    showContributionError('note', 'Choose one person and enter a memory or note.');
+    return;
+  }
+  const target = getPerson(targetPersonId);
+  const payload = {
+    submissionType: 'note',
+    targetPersonId,
+    title: document.getElementById('note-title').value.trim(),
+    noteBody,
+    photoLink: document.getElementById('note-photo-link').value.trim(),
+    branchIds: target?.branch_ids || [],
+    relationship: selectedProfileType || '',
+    submittedBy: document.getElementById('note-submitted-by').value.trim() || 'anonymous',
+    submittedEmail: ''
+  };
+  const saved = await submitContribution(payload);
+  if (!saved) {
+    showContributionError('note', 'This memory was not saved. Please check your connection and try again.');
+    return;
+  }
+  document.querySelector('#contribute-panel-note form').reset();
+  pickerState.note = { selected: [], query: '' };
+  renderPersonPicker('note');
+  showContributionSuccess('note', `Memory about ${target?.name.display || 'this person'} submitted for review.`, payload);
+}
+
+async function submitEventForm(event) {
   event.preventDefault();
 
   const type = document.getElementById('event-type').value;
@@ -4541,12 +4707,6 @@ function submitEventForm(event) {
   const recurring = document.getElementById('event-recurring').value === 'true';
   const photoLink = document.getElementById('event-photo-link').value.trim();
   const submittedBy = document.getElementById('event-submitted-by').value.trim() || 'anonymous';
-
-  let locationId = null;
-  if (location) {
-    locationId = buildLocationId('loc_event');
-    D.locations[locationId] = { name: location, short: location };
-  }
 
   const selectedPersonObjects = selectedPeople.map(getPerson).filter(Boolean);
   const branchIds = [...new Set(selectedPersonObjects.flatMap(person => person.branch_ids || []))];
@@ -4567,7 +4727,8 @@ function submitEventForm(event) {
     recurrence: recurring && month ? { type: 'annual', month, day: day || 1 } : { type: 'none' },
     people: selectedPeople.map(personId => ({ person_id: personId, role: 'participant' })),
     branch_ids: branchIds,
-    location_id: locationId,
+    location_id: null,
+    location_name: location || null,
     media_ids: [],
     cover_media_id: null,
     tags: [type, submittedBy ? `submitted-by:${submittedBy}` : null].filter(Boolean),
@@ -4577,9 +4738,10 @@ function submitEventForm(event) {
     status: 'submitted'
   };
 
-  D.events.push(createdEvent);
-  sendSubmissionToGoogleSheets({
+  const saved = await submitContribution({
     submissionType: 'event',
+    record: createdEvent,
+    branchIds,
     relationship: selectedProfileType || '',
     eventTitle: title,
     eventType: type,
@@ -4590,6 +4752,10 @@ function submitEventForm(event) {
     submittedBy,
     submittedEmail: ''
   });
+  if (!saved) {
+    showContributionError('event', 'This event was not saved. Please check your connection and try again.');
+    return;
+  }
   document.querySelector('#contribute-panel-event form').reset();
   toggleDateMode('event-date');
   pickerState.event.selected = [];
@@ -4598,11 +4764,10 @@ function submitEventForm(event) {
   document.querySelectorAll('#event-recurring-toggle .legacy-toggle-btn').forEach(button => button.classList.remove('active'));
   document.querySelectorAll('#event-recurring-toggle .legacy-toggle-btn')[1].classList.add('active');
   renderPersonPicker('event');
-  showContributionSuccess('event', `${createdEvent.title} added successfully.`, createdEvent);
-  refreshAllDerivedViews();
+  showContributionSuccess('event', `${createdEvent.title} was submitted for family review.`, createdEvent);
 }
 
-function submitStoryForm(event) {
+async function submitStoryForm(event) {
   event.preventDefault();
 
   const title = document.getElementById('story-title').value.trim();
@@ -4643,9 +4808,10 @@ function submitStoryForm(event) {
     privacy: 'family'
   };
 
-  D.stories.push(story);
-  sendSubmissionToGoogleSheets({
+  const saved = await submitContribution({
     submissionType: 'story',
+    record: story,
+    branchIds: story.branch_ids,
     relationship: selectedProfileType || '',
     storyTitle: title,
     storyBody: body,
@@ -4653,12 +4819,15 @@ function submitStoryForm(event) {
     submittedBy,
     submittedEmail: ''
   });
+  if (!saved) {
+    showContributionError('story', 'This story was not saved. Please check your connection and try again.');
+    return;
+  }
   document.querySelector('#contribute-panel-story form').reset();
   pickerState.story.selected = [];
   pickerState.story.query = '';
   renderPersonPicker('story');
-  showContributionSuccess('story', `${story.title} added successfully.`, story);
-  refreshAllDerivedViews();
+  showContributionSuccess('story', `${story.title} was submitted for family review.`, story);
 }
 
 // ============================================================
@@ -5128,7 +5297,7 @@ function toggleStructuredDate(checkbox) {
 
 function renderStructuredRecordForm(type, record, context) {
   if (!record) return '<div class="empty-state">No records are available for this type.</div>';
-  return `<form id="${context}-structured-form" onsubmit="saveStructuredRecord(event,'${context}','${type}','${record.id}')"><div class="contribute-form-grid">${(RECORD_SCHEMAS[type] || []).map(field => renderStructuredField(field, record, context)).join('')}</div><div class="admin-action-row" style="margin-top:22px;"><button class="export-btn" type="submit">Save Changes</button></div></form>`;
+  return `<form id="${context}-structured-form" onsubmit="saveStructuredRecord(event,'${context}','${type}','${record.id}')"><div class="contribute-form-grid">${(RECORD_SCHEMAS[type] || []).map(field => renderStructuredField(field, record, context)).join('')}</div><div class="admin-action-row" style="margin-top:22px;"><button class="export-btn" type="submit">Save Changes</button><button class="duplicate-btn" type="button" onclick="deleteStructuredRecord('${context}','${type}','${record.id}',this)">Delete Record</button></div></form>`;
 }
 
 function collectStructuredRecord(form, type, original) {
@@ -5162,7 +5331,37 @@ function collectStructuredRecord(form, type, original) {
   return record;
 }
 
-function saveStructuredRecord(event, context, type, id) {
+function syncPersonRelationships(original, record) {
+  const changed = new Map([[record.id, record]]);
+  const updateReciprocal = (otherId, field, add, value) => {
+    const other = getPerson(otherId);
+    if (!other || other.id === record.id) return;
+    const copy = changed.get(other.id) || structuredClone(other);
+    const list = copy.relationships[field] || [];
+    if (field === 'spouses') {
+      const without = list.filter(item => item.person_id !== record.id);
+      copy.relationships[field] = add ? [...without, value] : without;
+    } else {
+      copy.relationships[field] = add ? [...new Set([...list, record.id])] : list.filter(item => item !== record.id);
+    }
+    changed.set(copy.id, copy);
+  };
+  const oldParents = new Set(original.relationships?.parents || []);
+  const newParents = new Set(record.relationships?.parents || []);
+  oldParents.forEach(id => { if (!newParents.has(id)) updateReciprocal(id, 'children', false); });
+  newParents.forEach(id => updateReciprocal(id, 'children', true));
+  const oldChildren = new Set(original.relationships?.children || []);
+  const newChildren = new Set(record.relationships?.children || []);
+  oldChildren.forEach(id => { if (!newChildren.has(id)) updateReciprocal(id, 'parents', false); });
+  newChildren.forEach(id => updateReciprocal(id, 'parents', true));
+  const oldSpouses = new Set((original.relationships?.spouses || []).map(item => item.person_id));
+  const newSpouses = new Set((record.relationships?.spouses || []).map(item => item.person_id));
+  oldSpouses.forEach(id => { if (!newSpouses.has(id)) updateReciprocal(id, 'spouses', false); });
+  newSpouses.forEach(id => updateReciprocal(id, 'spouses', true, { person_id: record.id, relationship_id: `rel_${[record.id, id].sort().join('_')}` }));
+  return [...changed.values()];
+}
+
+async function saveStructuredRecord(event, context, type, id) {
   event.preventDefault();
   const records = getEditorRecords(type);
   const original = records.find(record => record.id === id);
@@ -5179,16 +5378,43 @@ function saveStructuredRecord(event, context, type, id) {
     const index = D[type].findIndex(item => item.id === id);
     D[type][index] = record;
   }
+  const recordsToPersist = type === 'persons' ? syncPersonRelationships(original, record) : [record];
+  if (type === 'persons') {
+    recordsToPersist.forEach(changedRecord => {
+      const index = D.persons.findIndex(person => person.id === changedRecord.id);
+      if (index >= 0) D.persons[index] = changedRecord;
+    });
+  }
   refreshAllDerivedViews();
+  const persisted = await Promise.all(recordsToPersist.map(changedRecord => persistRecord(type, changedRecord)));
   if (context === 'admin') {
     adminEditorRecordId = record.id;
     renderAdmin();
-    setAdminEditorMessage('Record updated.');
+    setAdminEditorMessage(persisted.every(Boolean) ? 'Record updated and saved centrally.' : 'Record updated locally, but central save failed.', persisted.every(Boolean) ? 'success' : 'error');
   } else {
     editDataRecordId = record.id;
     renderEditData();
-    setEditDataMessage('Record updated.');
+    setEditDataMessage(persisted.every(Boolean) ? 'Record updated and saved centrally.' : 'Record updated locally, but central save failed.', persisted.every(Boolean) ? 'success' : 'error');
   }
+}
+
+async function deleteStructuredRecord(context, type, id, button) {
+  if (button.dataset.confirm !== 'true') {
+    button.dataset.confirm = 'true';
+    button.textContent = 'Click again to confirm';
+    return;
+  }
+  if (type === 'locations') delete D.locations[id];
+  else D[type] = D[type].filter(record => record.id !== id);
+  await persistDelete(type, id);
+  if (context === 'admin') {
+    adminEditorRecordId = '';
+    renderAdmin();
+  } else {
+    editDataRecordId = '';
+    renderEditData();
+  }
+  refreshAllDerivedViews();
 }
 
 function renderEditData() {
@@ -5215,6 +5441,7 @@ function renderEditData() {
       <div class="admin-action-row" style="margin-top:14px;">
         <button class="export-btn" type="button" onclick="createStructuredRecord('${editDataType}')">Add ${escapeHtml(editDataType.slice(0, -1) || editDataType)}</button>
         <button class="export-btn" type="button" onclick="exportFamilyDataJs()">Export updated family-legacy-data.js</button>
+        <button class="export-btn" type="button" onclick="seedGoogleSheet()">Seed Google Sheet from local data</button>
       </div>
     </div>
   `;
@@ -5248,6 +5475,19 @@ function createStructuredRecord(type) {
   }
   editDataRecordId = id;
   renderEditData();
+}
+
+async function seedGoogleSheet() {
+  try {
+    const result = await familyApi('seedFromInitialData', { dataset: FamilyData });
+    if (!result.seeded) throw new Error('Seed was not accepted');
+    await reloadCentralData();
+    renderEditData();
+    setEditDataMessage('Google Sheet initialized from the local seed data.');
+    showSyncStatus('Shared family archive initialized.', 'success');
+  } catch (error) {
+    setEditDataMessage(error.message, 'error');
+  }
 }
 
 function setEditDataMessage(message, status = 'success') {
@@ -5478,6 +5718,7 @@ function updateProfileType(id, field, value) {
   const type = getProfileType(id);
   if (!type) return;
   type[field] = value.trim();
+  persistSettings();
   renderAdmin();
 }
 
@@ -5485,6 +5726,7 @@ function updateProfilePrompt(id, index, value) {
   const type = getProfileType(id);
   if (!type) return;
   type.prompts[index] = value.trim();
+  persistSettings();
   renderAdmin();
 }
 
@@ -5492,6 +5734,7 @@ function addProfilePrompt(id) {
   const type = getProfileType(id);
   if (!type) return;
   type.prompts.push('Add a family memory prompt here.');
+  persistSettings();
   renderAdmin();
 }
 
@@ -5499,6 +5742,7 @@ function removeProfilePrompt(id, index) {
   const type = getProfileType(id);
   if (!type) return;
   type.prompts.splice(index, 1);
+  persistSettings();
   renderAdmin();
 }
 
@@ -5509,6 +5753,7 @@ function toggleProfileTypeField(id, field, checked) {
   if (checked) fields.add(field);
   else fields.delete(field);
   type.show_fields = [...fields];
+  persistSettings();
   renderAdmin();
 }
 
@@ -5521,6 +5766,7 @@ function addProfileType() {
     prompts: ['What family memory would you like to preserve?'],
     show_fields: ['bio', 'story', 'event', 'photo']
   });
+  persistSettings();
   renderAdmin();
 }
 
@@ -5538,6 +5784,7 @@ function confirmDeleteProfileType(id) {
   D.settings.profile_types = (D.settings.profile_types || []).filter(type => type.id !== id);
   if (selectedProfileType === id) selectedProfileType = null;
   profileTypePendingDeleteId = null;
+  persistSettings();
   renderAdmin();
 }
 
@@ -5584,6 +5831,7 @@ function addFamilyAdmin() {
     return;
   }
   D.settings.family_admins.push({ id: `famadmin_${Date.now()}`, name, password_hash: simplePasswordHash(password), branch_ids: branchIds, created_by: 'super_admin', created_at: new Date().toISOString().slice(0, 10) });
+  persistSettings();
   renderAdmin();
 }
 
@@ -5593,59 +5841,70 @@ function toggleFamilyAdminBranch(id, branchId, checked) {
   const ids = new Set(admin.branch_ids || []);
   checked ? ids.add(branchId) : ids.delete(branchId);
   admin.branch_ids = [...ids];
+  persistSettings();
 }
 
 function resetFamilyAdminPassword(id, password) {
   if (!password) return;
   const admin = D.settings.family_admins.find(item => item.id === id);
   if (admin) admin.password_hash = simplePasswordHash(password);
+  persistSettings();
 }
 
 function confirmRemoveFamilyAdmin(id) {
   D.settings.family_admins = D.settings.family_admins.filter(admin => admin.id !== id);
   familyAdminPendingDeleteId = null;
+  persistSettings();
   renderAdmin();
 }
 
 function getPendingSubmissions() {
-  return ['persons','events','stories'].flatMap(type => scopedRecords(type).filter(record => record.status === 'submitted').map(record => ({ type, record })));
+  return (D.pendingSubmissions || []).filter(submission => {
+    if (submission.status !== 'pending') return false;
+    if (currentUserRole === 'super_admin') return true;
+    return (submission.branch_ids || []).some(id => currentUserBranchIds.includes(id));
+  });
 }
 
 function renderPendingSubmissions() {
   const pending = getPendingSubmissions();
-  return pending.length ? pending.map(({ type, record }) => `
+  return pending.length ? pending.map(submission => `
     <div class="admin-card" style="margin-bottom:14px;">
-      <div class="mini-section-title">${escapeHtml(record.name?.display || record.title || record.id)}</div>
-      <div class="profile-sources">${escapeHtml(type.slice(0,-1))} · submitted by ${escapeHtml(record.submitted_by || 'anonymous')}</div>
+      <div class="mini-section-title">${escapeHtml(submission.payload?.title || submission.payload?.storyTitle || [submission.payload?.firstName, submission.payload?.lastName].filter(Boolean).join(' ') || submission.submission_type)}</div>
+      <div class="profile-sources">${escapeHtml(submission.submission_type)} — submitted by ${escapeHtml(submission.submitted_by || 'anonymous')}</div>
+      ${submission.payload?.noteBody ? `<div class="profile-bio" style="margin-top:12px;">${escapeHtml(submission.payload.noteBody)}</div>` : ''}
       <div class="admin-action-row" style="margin-top:14px;">
-        <button class="export-btn" onclick="approveSubmission('${type}','${record.id}')">Approve</button>
-        <button class="export-btn" onclick="openPendingForEdit('${type}','${record.id}')">Edit First</button>
-        <button class="duplicate-btn" onclick="rejectSubmission('${type}','${record.id}',this)">Reject</button>
+        <button class="export-btn" onclick="approveSubmission('${submission.id}')">Approve</button>
+        <button class="duplicate-btn" onclick="rejectSubmission('${submission.id}',this)">Reject</button>
       </div>
     </div>`).join('') : '<div class="green-note">No pending submissions in your assigned branches.</div>';
 }
 
-function approveSubmission(type, id) {
-  const record = (D[type] || []).find(item => item.id === id);
-  if (record && recordInAdminScope(record)) record.status = 'approved';
-  renderAdmin();
+async function approveSubmission(id) {
+  try {
+    await familyApi('approveSubmission', { id });
+    await reloadCentralData();
+    renderAdmin();
+    showSyncStatus('Submission approved and added to the archive.', 'success');
+  } catch (error) {
+    showSyncStatus('Approval failed — check your connection.', 'error');
+  }
 }
 
-function openPendingForEdit(type, id) {
-  adminEditorType = type;
-  adminEditorRecordId = id;
-  adminTab = 'editor';
-  renderAdmin();
-}
-
-function rejectSubmission(type, id, button) {
+async function rejectSubmission(id, button) {
   if (button.dataset.confirm !== 'true') {
     button.dataset.confirm = 'true';
     button.textContent = 'Click again to confirm';
     return;
   }
-  D[type] = D[type].filter(record => record.id !== id || !recordInAdminScope(record));
-  renderAdmin();
+  try {
+    await familyApi('rejectSubmission', { id });
+    await reloadCentralData();
+    renderAdmin();
+    showSyncStatus('Submission rejected.', 'success');
+  } catch (error) {
+    showSyncStatus('Rejection failed — check your connection.', 'error');
+  }
 }
 
 function setAdminEditorType(type) {
@@ -5792,7 +6051,7 @@ function dismissDuplicatePair(key) {
   renderAdmin();
 }
 
-function mergeDuplicatePair(idA, idB) {
+async function mergeDuplicatePair(idA, idB) {
   const personA = getPerson(idA);
   const personB = getPerson(idB);
   if (!personA || !personB) return;
@@ -5819,6 +6078,13 @@ function mergeDuplicatePair(idA, idB) {
   D.persons = D.persons.filter(person => person.id !== remove.id);
   if (currentPersonId === remove.id) currentPersonId = keep.id;
   refreshAllDerivedViews();
+  await Promise.all([
+    ...D.persons.map(person => persistRecord('persons', person)),
+    ...D.events.map(event => persistRecord('events', event)),
+    ...D.stories.map(story => persistRecord('stories', story)),
+    ...D.media.map(media => persistRecord('media', media)),
+    persistDelete('persons', remove.id)
+  ]);
 }
 
 // ============================================================
@@ -6141,10 +6407,14 @@ document.addEventListener('keydown', e => {
 // ============================================================
 // INIT
 // ============================================================
-renderHome();
-if (window.location.hash.toLowerCase() === '#contribute') {
-  showPage('contribute');
+async function initializeFamilyLegacy() {
+  await loadCentralFamilyData();
+  renderHome();
+  if (window.location.hash.toLowerCase() === '#contribute') {
+    showPage('contribute');
+  }
 }
+initializeFamilyLegacy();
 </script>
 </body>
 </html>
