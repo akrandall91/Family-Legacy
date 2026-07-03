@@ -5,6 +5,12 @@
 // FAMILY TREE — D3 HIERARCHICAL
 // ============================================================
 let treeFilterBranch = 'all';
+let treePanControlsInitialized = false;
+let treeIsDragging = false;
+let treeDragStartX = 0;
+let treeDragStartY = 0;
+let treeViewX = 0;
+let treeViewY = 0;
 
 function filterTree(branch, btn) {
   treeFilterBranch = branch;
@@ -16,10 +22,123 @@ function filterTree(branch, btn) {
   treeRendered = true;
 }
 
+function findFamilyGroups(dataset) {
+  const persons = dataset.persons || [];
+  const personIds = new Set(persons.map(p => p.id));
+  const adjacency = {};
+
+  persons.forEach(person => {
+    adjacency[person.id] = new Set();
+  });
+
+  function link(a, b) {
+    if (!a || !b || !personIds.has(a) || !personIds.has(b)) return;
+    adjacency[a].add(b);
+    adjacency[b].add(a);
+  }
+
+  persons.forEach(person => {
+    const rel = person.relationships || {};
+    (rel.parents || []).forEach(parentId => link(person.id, parentId));
+    (rel.children || []).forEach(childId => link(person.id, childId));
+    (rel.spouses || []).forEach(spouse => link(person.id, spouse.person_id));
+  });
+
+  const visited = new Set();
+  const rootBranch = getBranch(dataset.meta && dataset.meta.root_branch_id);
+  const mainRootId = rootBranch ? rootBranch.root_person_id : (persons[0] && persons[0].id);
+  const groups = [];
+
+  persons.forEach(person => {
+    if (visited.has(person.id)) return;
+
+    const componentIds = new Set();
+    const queue = [person.id];
+    visited.add(person.id);
+
+    while (queue.length) {
+      const currentId = queue.shift();
+      componentIds.add(currentId);
+      (adjacency[currentId] || []).forEach(nextId => {
+        if (!visited.has(nextId)) {
+          visited.add(nextId);
+          queue.push(nextId);
+        }
+      });
+    }
+
+    const componentPersons = persons.filter(p => componentIds.has(p.id));
+    const topPeople = componentPersons.filter(p => !(((p.relationships || {}).parents || []).length));
+    let rootCandidates = topPeople.length ? topPeople : [componentPersons[0]];
+
+    if (mainRootId && componentIds.has(mainRootId)) {
+      const mainRoot = getPerson(mainRootId);
+      const seedIds = new Set([mainRootId]);
+      ((mainRoot && mainRoot.relationships && mainRoot.relationships.spouses) || []).forEach(spouse => {
+        if (componentIds.has(spouse.person_id)) seedIds.add(spouse.person_id);
+      });
+
+      const ancestorIds = new Set();
+
+      function climbToTop(personId, depth = 0) {
+        const personForClimb = getPerson(personId);
+        if (!personForClimb || !componentIds.has(personId)) return;
+        const parentIds = ((personForClimb.relationships || {}).parents || []).filter(parentId => componentIds.has(parentId));
+        if (!parentIds.length) {
+          if (depth > 0) ancestorIds.add(personId);
+          return;
+        }
+        parentIds.forEach(parentId => climbToTop(parentId, depth + 1));
+      }
+
+      seedIds.forEach(seedId => climbToTop(seedId));
+      const preferredIds = ancestorIds.size ? Array.from(ancestorIds) : [mainRootId];
+      rootCandidates = preferredIds.map(id => getPerson(id)).filter(Boolean);
+    }
+
+    const rootPersonIds = [];
+    const claimed = new Set();
+
+    rootCandidates.forEach(rootPerson => {
+      if (!rootPerson || claimed.has(rootPerson.id)) return;
+      rootPersonIds.push(rootPerson.id);
+      claimed.add(rootPerson.id);
+
+      ((rootPerson.relationships || {}).spouses || []).forEach(spouseRef => {
+        const spouse = getPerson(spouseRef.person_id);
+        const spouseIsTop = spouse && rootCandidates.some(candidate => candidate.id === spouse.id);
+        if (spouse && componentIds.has(spouse.id) && spouseIsTop) claimed.add(spouse.id);
+      });
+    });
+
+    groups.push({
+      rootPersonIds,
+      personIds: componentIds,
+      containsMainRoot: mainRootId ? componentIds.has(mainRootId) : false
+    });
+  });
+
+  return groups.sort((a, b) => {
+    if (a.containsMainRoot && !b.containsMainRoot) return -1;
+    if (!a.containsMainRoot && b.containsMainRoot) return 1;
+    return a.rootPersonIds.join('|').localeCompare(b.rootPersonIds.join('|'));
+  });
+}
+
+function getFamilyGroupLabel(group, index) {
+  if (index === 0) return (D.meta && D.meta.family_name) || 'Family Tree';
+  const rootNames = group.rootPersonIds
+    .map(id => getPerson(id))
+    .filter(Boolean)
+    .map(person => person.name.display || `${person.name.first} ${person.name.last}`.trim());
+  if (!rootNames.length) return 'Family Group';
+  if (rootNames.length === 1) return `${rootNames[0]}' Family`;
+  return `${rootNames.join(' & ')} Family`;
+}
+
 function buildTreeData() {
-  // Build a tree structure rooted at whoever D.meta.root_branch_id points to
-  const rootBranch = getBranch(D.meta.root_branch_id);
-  const rootId = rootBranch ? rootBranch.root_person_id : (D.persons[0] && D.persons[0].id);
+  const groups = findFamilyGroups(D);
+  const rootId = groups[0] && groups[0].rootPersonIds[0];
   const visited = new Set();
 
   function buildNode(personId, depth) {
@@ -56,21 +175,51 @@ function buildTreeData() {
   return buildNode(rootId, 0);
 }
 
+function applyTreePanTransform() {
+  d3.select('#tree-svg').attr('style', `transform: translate(${treeViewX}px, ${treeViewY}px)`);
+}
+
+function initTreePanControls() {
+  if (treePanControlsInitialized) return;
+
+  const container = document.getElementById('tree-svg-container');
+  if (!container) return;
+
+  container.addEventListener('mousedown', e => {
+    treeIsDragging = true;
+    treeDragStartX = e.clientX - treeViewX;
+    treeDragStartY = e.clientY - treeViewY;
+    container.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!treeIsDragging) return;
+    treeViewX = e.clientX - treeDragStartX;
+    treeViewY = e.clientY - treeDragStartY;
+    applyTreePanTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    treeIsDragging = false;
+    container.style.cursor = 'grab';
+  });
+
+  treePanControlsInitialized = true;
+}
+
 function renderTree() {
   const container = document.getElementById('tree-svg-container');
   const svg = d3.select('#tree-svg');
   svg.selectAll('*').remove();
+  initTreePanControls();
 
   const W = container.clientWidth || 900;
   const H = container.clientHeight || 600;
 
   const CARD_W = 140, CARD_H = 64, H_GAP = 40, V_GAP = 100;
+  const GROUP_LABEL_H = 34, GROUP_GAP = 86;
 
-  // Build manual layout for family tree (generation-based)
-  const generations = [];
-  const allNodes = [];
-
-  function collectGenerations(personId, gen, visited2 = new Set()) {
+  function collectGenerations(personId, gen, generations, allNodes, visited2 = new Set()) {
     if (visited2.has(personId)) return;
     visited2.add(personId);
     const p = getPerson(personId);
@@ -97,34 +246,62 @@ function renderTree() {
       }
     });
 
-    p.relationships.children.forEach(childId => collectGenerations(childId, gen + 1, visited2));
+    p.relationships.children.forEach(childId => collectGenerations(childId, gen + 1, generations, allNodes, visited2));
   }
 
-  const rootBranchForRender = getBranch(D.meta.root_branch_id);
-  const treeRootId = rootBranchForRender ? rootBranchForRender.root_person_id : (D.persons[0] && D.persons[0].id);
-  collectGenerations(treeRootId, 0);
+  const groups = findFamilyGroups(D);
+  const allSections = [];
+  let totalH = 40;
+  let widestSection = W;
 
-  // Layout
-  const totalH = generations.length * (CARD_H + V_GAP) + 80;
-  const maxGenWidth = Math.max(...generations.map(g => g.length * (CARD_W + H_GAP)));
-  const totalW = Math.max(W, maxGenWidth + 120);
+  groups.forEach((group, index) => {
+    const generations = [];
+    const allNodes = [];
+    const visited = new Set();
 
-  svg.attr('viewBox', `0 0 ${totalW} ${totalH}`);
+    group.rootPersonIds.forEach(rootId => collectGenerations(rootId, 0, generations, allNodes, visited));
+    if (!allNodes.length) return;
 
-  const nodeMap = {};
-  allNodes.forEach(n => nodeMap[n.id] = n);
-
-  generations.forEach((gen, gi) => {
-    const genW = gen.length * (CARD_W + H_GAP);
-    const startX = (totalW - genW) / 2;
-    gen.forEach((node, i) => {
-      node.x = startX + i * (CARD_W + H_GAP) + CARD_W / 2;
-      node.y = 40 + gi * (CARD_H + V_GAP) + CARD_H / 2;
-    });
+    const populatedGenerations = generations.filter(Boolean);
+    const maxGenWidth = Math.max(...populatedGenerations.map(g => g.length * (CARD_W + H_GAP)));
+    const sectionH = populatedGenerations.length * (CARD_H + V_GAP) + GROUP_LABEL_H;
+    allSections.push({ group, index, generations, allNodes, yOffset: totalH, sectionH });
+    widestSection = Math.max(widestSection, maxGenWidth + 120);
+    totalH += sectionH + GROUP_GAP;
   });
 
-  // Draw edges (parent → child)
+  const totalW = Math.max(W, widestSection);
+  svg.attr('viewBox', `0 0 ${totalW} ${Math.max(H, totalH)}`);
+
   const edgeGroup = svg.append('g').attr('class', 'edges');
+  const nodeGroup = svg.append('g').attr('class', 'nodes');
+  const nodeMap = {};
+
+  allSections.forEach(section => {
+    svg.append('text')
+      .attr('x', 60)
+      .attr('y', section.yOffset)
+      .attr('font-family', 'DM Mono, monospace')
+      .attr('font-size', 10)
+      .attr('font-weight', '600')
+      .attr('fill', '#8a7a68')
+      .attr('letter-spacing', '0.12em')
+      .text(getFamilyGroupLabel(section.group, section.index).toUpperCase());
+
+    section.generations.forEach((gen, gi) => {
+      if (!gen) return;
+      const genW = gen.length * (CARD_W + H_GAP);
+      const startX = (totalW - genW) / 2;
+      gen.forEach((node, i) => {
+        node.x = startX + i * (CARD_W + H_GAP) + CARD_W / 2;
+        node.y = section.yOffset + GROUP_LABEL_H + gi * (CARD_H + V_GAP) + CARD_H / 2;
+      });
+    });
+
+    section.allNodes.forEach(n => nodeMap[n.id] = n);
+  });
+
+  // Draw edges (parent -> child)
   D.persons.forEach(p => {
     const parentNode = nodeMap[p.id];
     if (!parentNode) return;
@@ -156,7 +333,7 @@ function renderTree() {
   });
 
   // Draw person cards
-  const nodeGroup = svg.append('g').attr('class', 'nodes');
+  const allNodes = allSections.flatMap(section => section.allNodes);
   allNodes.forEach(node => {
     const p = node.person;
     const color = getPersonColor(p);
@@ -220,34 +397,5 @@ function renderTree() {
     }
   });
 
-  // Pan + zoom
-  let isDragging = false, startX, startY, viewX = 0, viewY = 0;
-
-  const inner = svg.select('.nodes').node().parentNode;
-
-  container.addEventListener('mousedown', e => {
-    isDragging = true;
-    startX = e.clientX - viewX;
-    startY = e.clientY - viewY;
-    container.style.cursor = 'grabbing';
-  });
-
-  window.addEventListener('mousemove', e => {
-    if (!isDragging) return;
-    viewX = e.clientX - startX;
-    viewY = e.clientY - startY;
-    svg.selectAll('g').attr('transform', function() {
-      const base = this.getAttribute('data-base') || '';
-      return base;
-    });
-    svg.attr('style', `transform: translate(${viewX}px, ${viewY}px)`);
-  });
-
-  window.addEventListener('mouseup', () => {
-    isDragging = false;
-    container.style.cursor = 'grab';
-  });
-
-  // Center initially
-  svg.attr('style', 'transform: translate(0,0)');
+  applyTreePanTransform();
 }
