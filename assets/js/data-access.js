@@ -18,7 +18,7 @@ const getMedia  = id => D.media.find(m => m.id === id);
 const getLoc    = id => id && D.locations[id] ? D.locations[id].short : '';
 
 
-const FAMILY_API_URL = 'https://script.google.com/macros/s/AKfycbwUf-D4OXHrmHeMazS_WhareKtJY_2X6g2rywzUCJlt1Ec6a6TelG6wswBMtkKD3G6wkA/exec';
+const FAMILY_API_URL = 'https://script.google.com/macros/s/AKfycbwJX8dOnm2hqfmvBkRlbdwU95oOp4s5xOj6nDlJDPEs58c7a1YHeviEUJvv7m_ZPP6wGw/exec';
 let centralDataAvailable = false;
 let syncStatusTimer = null;
 
