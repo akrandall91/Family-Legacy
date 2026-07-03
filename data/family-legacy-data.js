@@ -611,7 +611,7 @@ const FamilyData = {
   settings: {
     // WARNING: these hashes are only casual-visitor deterrents. This is a
     // public static site, so anyone can inspect the source and gate logic.
-    admin_password_hash: "3a6e3b6f",
+    admin_password_hash: "aa57e3f0",
     family_admins: [],
     profile_types: [
       {
