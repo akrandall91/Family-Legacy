@@ -194,3 +194,11 @@ After editing, open `index.html` in a browser (just double-click the file, or us
 - Forgetting to add the relationship on *both* people (parent → child, and child → parent's `children` array).
 
 The Admin → Edit Data page in the running site also has an **Export All Data as JSON** button, which dumps the live in-memory dataset. That's a good way to sanity-check what the app currently thinks the data looks like, separate from what's written in the file.
+
+Before you commit, also run the validator from the project root:
+
+```
+node scripts/validate-data.js
+```
+
+It catches the most common mistakes automatically — duplicate ids, broken references, missing reciprocal relationships, missing required fields, invalid `privacy` values, and living people with exact birthdates or other sensitive fields recorded. Fix anything under "ERRORS" before committing; "WARNINGS" are worth a look but won't block you.
