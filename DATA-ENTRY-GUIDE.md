@@ -202,3 +202,16 @@ node scripts/validate-data.js
 ```
 
 It catches the most common mistakes automatically — duplicate ids, broken references, missing reciprocal relationships, missing required fields, invalid `privacy` values, and living people with exact birthdates or other sensitive fields recorded. Fix anything under "ERRORS" before committing; "WARNINGS" are worth a look but won't block you.
+# Blended families and evidence
+
+Children are connected to individual parents, never automatically to both adults in a couple. A legacy value such as `parents: ["p_one"]` remains valid and is read as a confirmed biological relationship. New entries may use `{ person_id, relationship_type, status, source_ids, notes, public, establishes_branch_descent }`.
+
+- One known parent: add only that parent; do not invent an unknown second parent.
+- Previous relationship: connect the child to their documented parent(s), then associate the child with the correct union only when known.
+- Step-parent, foster parent, or guardian: use that relationship type; it does not establish biological descent.
+- Adoption: use `adoptive`; it participates in family-line and sibling views while remaining clearly labeled.
+- Evidence: choose confirmed, probable, possible, oral-history, disputed, or unknown. Add source IDs and a concise note.
+
+Full siblings share two biological parents; half-siblings share one; adoptive siblings share an adoptive parent. Step-siblings require a supported parent union or household and are never guessed from display placement.
+
+`home_branch_id` controls where the experience opens. `root_branch_ids` lists the earliest known lines, including unconnected research branches. Adding older ancestors never requires moving the familiar home anchor.

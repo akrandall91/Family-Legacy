@@ -40,6 +40,11 @@ function err(msg) { errors.push(msg); }
 function warn(msg) { warnings.push(msg); }
 
 const VALID_PRIVACY = new Set(['public', 'family', 'private', 'admin']);
+const VALID_PARENT_TYPES = new Set(['biological','adoptive','step','foster','guardian','social-parent','unknown']);
+const VALID_PARTNER_TYPES = new Set(['marriage','partnership','former-marriage','former-partnership','co-parent','unknown']);
+const VALID_STATUSES = new Set(['confirmed','probable','possible','oral-history','disputed','unknown']);
+const VALID_BRANCH_CONNECTIONS = new Set(['descends-from','maternal-origin','paternal-origin','married-into','adoptive-origin','stepfamily-connection','household-connection','merged-with','possible-connection','unknown-connection']);
+const relId = value => typeof value === 'string' ? value : value && value.person_id;
 const REQUIRED_PERSON_FIELDS = ['id', 'name', 'gender', 'is_living', 'relationships', 'branch_ids', 'privacy'];
 const REQUIRED_EVENT_FIELDS = ['id', 'type', 'title', 'date', 'people', 'branch_ids', 'privacy'];
 const REQUIRED_STORY_FIELDS = ['id', 'title', 'body', 'people_ids', 'status', 'privacy'];
@@ -53,6 +58,7 @@ function validate(D) {
   const media = D.media || [];
   const locations = D.locations || {};
   const sources = D.sources || [];
+  const unions = D.unions || [];
 
   const personIds = new Set();
   const branchIds = new Set(branches.map(b => b.id));
@@ -98,7 +104,10 @@ function validate(D) {
 
     const rel = p.relationships || {};
 
-    for (const parentId of rel.parents || []) {
+    for (const parentRef of rel.parents || []) {
+      const parentId = relId(parentRef);
+      if (typeof parentRef === 'object' && (!VALID_PARENT_TYPES.has(parentRef.relationship_type) || !VALID_STATUSES.has(parentRef.status))) err(`Person "${who}" has an invalid parent relationship type or status`);
+      if (parentId === who) err(`Person "${who}" cannot be their own parent`);
       if (!personIds.has(parentId)) {
         err(`Person "${who}" has broken parent reference "${parentId}"`);
       } else {
@@ -107,12 +116,17 @@ function validate(D) {
       }
     }
 
-    for (const childId of rel.children || []) {
+    for (const childRef of rel.children || []) {
+      const childId = relId(childRef);
+      if (childId === who) err(`Person "${who}" cannot be their own child`);
       if (!personIds.has(childId)) err(`Person "${who}" has broken child reference "${childId}"`);
     }
 
     for (const spouse of rel.spouses || []) {
       const spouseId = spouse && spouse.person_id;
+      if (spouseId === who) err(`Person "${who}" cannot be partnered with themselves`);
+      if (spouse.relationship_type && !VALID_PARTNER_TYPES.has(spouse.relationship_type)) err(`Person "${who}" has invalid partnership type "${spouse.relationship_type}"`);
+      if (spouse.status && !VALID_STATUSES.has(spouse.status)) err(`Person "${who}" has invalid partnership status "${spouse.status}"`);
       if (!spouseId || !personIds.has(spouseId)) {
         err(`Person "${who}" has broken spouse reference "${spouseId}"`);
       } else {
@@ -136,9 +150,10 @@ function validate(D) {
   for (const p of persons) {
     const who = p.id;
     const rel = p.relationships || {};
-    for (const childId of rel.children || []) {
+    for (const childRef of rel.children || []) {
+      const childId = relId(childRef);
       const child = persons.find(x => x.id === childId);
-      if (child && !(child.relationships.parents || []).includes(who)) {
+      if (child && !(child.relationships.parents || []).some(parent => relId(parent) === who)) {
         err(`Missing reciprocal link: "${who}" lists "${childId}" as a child, but "${childId}" does not list "${who}" as a parent`);
       }
     }
@@ -164,6 +179,21 @@ function validate(D) {
     for (const cid of b.child_branch_ids || []) {
       if (!branchIds.has(cid)) err(`Branch "${who}" references missing child branch "${cid}"`);
     }
+    for (const connection of b.connected_branches || []) {
+      if (!branchIds.has(connection.branch_id)) err(`Branch "${who}" connects to missing branch "${connection.branch_id}"`);
+      if (!VALID_BRANCH_CONNECTIONS.has(connection.relationship)) err(`Branch "${who}" has invalid connection type "${connection.relationship}"`);
+    }
+  }
+
+  for (const rootId of D.meta.root_branch_ids || [D.meta.root_branch_id].filter(Boolean)) if (!branchIds.has(rootId)) err(`Meta references missing root branch "${rootId}"`);
+  if (D.meta.home_branch_id && !branchIds.has(D.meta.home_branch_id)) err(`Meta references missing home branch "${D.meta.home_branch_id}"`);
+  checkDuplicateIds(unions, 'union');
+  for (const union of unions) {
+    if (!VALID_PARTNER_TYPES.has(union.relationship_type || 'unknown')) err(`Union "${union.id}" has invalid type`);
+    if ((union.partner_ids || []).some(id => !personIds.has(id))) err(`Union "${union.id}" references a missing partner`);
+    if (new Set(union.partner_ids || []).size !== (union.partner_ids || []).length) err(`Union "${union.id}" repeats a partner`);
+    for (const childId of union.child_ids || []) { if (!personIds.has(childId)) err(`Union "${union.id}" references missing child "${childId}"`); const child=persons.find(p=>p.id===childId); if (child && !(child.relationships.parents || []).some(r=>(union.partner_ids || []).includes(relId(r)))) err(`Union "${union.id}" child "${childId}" is not connected to either partner`); }
+    if (union.start_date && union.end_date && union.start_date > union.end_date) err(`Union "${union.id}" ends before it starts`);
   }
 
   // ---- Events ----

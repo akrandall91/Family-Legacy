@@ -75,6 +75,10 @@
       <div id="tree-filter-buttons" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       <span class="tree-instructions">Click a person to open profile · Drag to pan</span>
     </div>
+    <div class="relationship-legend" aria-label="Relationship line legend">
+      <span><i class="legend-line solid"></i> Confirmed biological</span><span><i class="legend-line double"></i> Adoptive</span>
+      <span><i class="legend-line dashed"></i> Step, guardian, or household</span><span><i class="legend-line dotted"></i> Uncertain or disputed</span>
+    </div>
     <div id="tree-svg-container">
       <svg id="tree-svg"></svg>
     </div>
@@ -400,6 +404,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="./data/family-legacy-data.js"></script>
 <script src="assets/js/data-access.js"></script>
+<script src="assets/js/relationship-engine.js"></script>
 <script src="assets/js/utils.js"></script>
 <script src="assets/js/render-home.js"></script>
 <script src="assets/js/render-tree.js"></script>

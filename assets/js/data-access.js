@@ -71,6 +71,7 @@ async function reloadCentralData() {
   D = result;
   D.pendingSubmissions = result.pendingSubmissions || [];
   centralDataAvailable = true;
+  rebuildFamilyIndexes();
   refreshAllDerivedViews();
   return D;
 }
@@ -136,9 +137,7 @@ async function submitContribution(payload) {
 }
 
 function resolveBranchForPerson(person) {
-  const lastName = (person?.name?.last || '').toLowerCase();
-  const matchedBranch = D.branches.find(branch => branch.name.toLowerCase().includes(lastName));
-  return matchedBranch ? [matchedBranch.id] : [D.meta.root_branch_id];
+  return [getHomeBranchId()];
 }
 
 function buildLocationId(prefix) {
@@ -152,6 +151,7 @@ function buildStoryExcerpt(body, limit = 180) {
 }
 
 function refreshAllDerivedViews() {
+  rebuildFamilyIndexes();
   renderHome();
   renderPeople();
   renderStories();

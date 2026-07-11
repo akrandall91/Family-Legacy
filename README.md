@@ -103,3 +103,8 @@ The data schema already has optional fields reserved for:
 None of this needs to happen before you start using the site. Add real people and stories first.
 
 See `DATA-ENTRY-GUIDE.md` for how to actually fill in the data file.
+# Genealogy model (v2)
+
+Family Legacy uses one governing rule: children attach to individual parents; couples, unions, households, sibling groups, and branches are derived views. Legacy string references remain supported and normalize in memory without changing the source file. Rich relationships record their type, evidence status, sources, notes, visibility, and effect on branch descent.
+
+The archive supports multiple ancestral roots and unlinked research branches. `home_branch_id` is a presentation anchor, not a claim about the earliest ancestor. Run `node scripts/validate-data.js` before publishing; living-person data in this public repository must remain non-sensitive.

@@ -39,13 +39,13 @@ function findFamilyGroups(dataset) {
 
   persons.forEach(person => {
     const rel = person.relationships || {};
-    (rel.parents || []).forEach(parentId => link(person.id, parentId));
-    (rel.children || []).forEach(childId => link(person.id, childId));
+    (rel.parents || []).forEach(parent => link(person.id, relationshipPersonId(parent)));
+    (rel.children || []).forEach(child => link(person.id, relationshipPersonId(child)));
     (rel.spouses || []).forEach(spouse => link(person.id, spouse.person_id));
   });
 
   const visited = new Set();
-  const rootBranch = getBranch(dataset.meta && dataset.meta.root_branch_id);
+  const rootBranch = getBranch(getHomeBranchId());
   const mainRootId = rootBranch ? rootBranch.root_person_id : (persons[0] && persons[0].id);
   const groups = [];
 
@@ -83,7 +83,7 @@ function findFamilyGroups(dataset) {
       function climbToTop(personId, depth = 0) {
         const personForClimb = getPerson(personId);
         if (!personForClimb || !componentIds.has(personId)) return;
-        const parentIds = ((personForClimb.relationships || {}).parents || []).filter(parentId => componentIds.has(parentId));
+        const parentIds = getParentIds(personForClimb).filter(parentId => componentIds.has(parentId));
         if (!parentIds.length) {
           if (depth > 0) ancestorIds.add(personId);
           return;
@@ -164,8 +164,8 @@ function buildTreeData() {
     });
 
     // Add children
-    p.relationships.children.forEach(childId => {
-      const child = buildNode(childId, depth + 1);
+    (ensureFamilyIndexes().childrenByParentId.get(p.id) || []).forEach(childRef => {
+      const child = buildNode(childRef.person_id, depth + 1);
       if (child) node.children.push(child);
     });
 
@@ -246,7 +246,7 @@ function renderTree() {
       }
     });
 
-    p.relationships.children.forEach(childId => collectGenerations(childId, gen + 1, generations, allNodes, visited2));
+    (ensureFamilyIndexes().childrenByParentId.get(p.id) || []).forEach(child => collectGenerations(child.person_id, gen + 1, generations, allNodes, visited2));
   }
 
   const groups = findFamilyGroups(D);
@@ -305,8 +305,8 @@ function renderTree() {
   D.persons.forEach(p => {
     const parentNode = nodeMap[p.id];
     if (!parentNode) return;
-    p.relationships.children.forEach(childId => {
-      const childNode = nodeMap[childId];
+    (ensureFamilyIndexes().childrenByParentId.get(p.id) || []).forEach(relationship => {
+      const childNode = nodeMap[relationship.person_id];
       if (!childNode) return;
       const x1 = parentNode.x, y1 = parentNode.y + CARD_H/2;
       const x2 = childNode.x, y2 = childNode.y - CARD_H/2;
@@ -314,7 +314,10 @@ function renderTree() {
         .attr('d', `M${x1},${y1} C${x1},${(y1+y2)/2} ${x2},${(y1+y2)/2} ${x2},${y2}`)
         .attr('fill', 'none')
         .attr('stroke', '#d6cabb')
-        .attr('stroke-width', 1.5);
+        .attr('stroke-width', relationship.relationship_type === 'adoptive' ? 3 : 1.5)
+        .attr('stroke-dasharray', ['step','guardian','foster','social-parent'].includes(relationship.relationship_type) ? '7,5' : (relationship.status === 'confirmed' ? null : '2,5'))
+        .attr('aria-label', `${p.name.display} is ${relationship.status} ${relationship.relationship_type} parent of ${childNode.person.name.display}`)
+        .append('title').text(`${relationship.relationship_type} parent relationship (${relationship.status})`);
     });
 
     // Spouse line

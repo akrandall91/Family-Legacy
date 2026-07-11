@@ -8,8 +8,7 @@ function getBranchColor(branchId) {
 }
 
 function getPersonColor(person) {
-  if (!person.branch_ids || !person.branch_ids.length) return '#8a7a68';
-  return getBranchColor(person.branch_ids[0]);
+  return getBranchColor(getPrimaryBranchId(person));
 }
 
 function getInitials(person) {
@@ -112,16 +111,12 @@ function getEventsForPerson(personId) {
 }
 
 function getPersonRelations(person) {
-  const parents = (person.relationships.parents || []).map(getPerson).filter(Boolean);
+  const parents = getParentIds(person).map(getPerson).filter(Boolean);
   const spouses = (person.relationships.spouses || []).map(s => getPerson(s.person_id)).filter(Boolean);
-  const children = (person.relationships.children || []).map(getPerson).filter(Boolean);
-  const siblings = (person.relationships.parents || []).length
-    ? D.persons.filter(other =>
-        other.id !== person.id &&
-        (other.relationships.parents || []).some(pid => person.relationships.parents.includes(pid))
-      )
-    : [];
-  return { parents, siblings, spouses, children };
+  const children = (ensureFamilyIndexes().childrenByParentId.get(person.id) || []).map(r => getPerson(r.person_id)).filter(Boolean);
+  const siblingGroups = { full:getFullSiblings(person.id), half:getHalfSiblings(person.id), step:getStepSiblings(person.id), adoptive:getAdoptiveSiblings(person.id) };
+  const siblings = [...new Map(Object.values(siblingGroups).flat().map(p=>[p.id,p])).values()];
+  return { parents, siblings, spouses, children, siblingGroups };
 }
 
 function getDateYear(dateValue) {

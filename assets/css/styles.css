@@ -2730,3 +2730,7 @@ body,
   }
   .scroll-reveal { opacity: 1; transform: none; }
 }
+/* Relationship lines use patterns as well as color. */
+.relationship-legend{display:flex;flex-wrap:wrap;gap:12px 22px;padding:12px 18px;background:#f7f3ec;color:#594b3c;font-size:.82rem}
+.relationship-legend span{display:flex;align-items:center;min-height:44px;gap:9px}.legend-line{display:inline-block;width:34px;border-top:2px solid #796957}.legend-line.double{border-top:4px double #796957}.legend-line.dashed{border-top-style:dashed}.legend-line.dotted{border-top-style:dotted}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

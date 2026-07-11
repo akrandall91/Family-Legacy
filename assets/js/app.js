@@ -128,6 +128,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 // ============================================================
 async function initializeFamilyLegacy() {
   await loadCentralFamilyData();
+  rebuildFamilyIndexes();
   renderHome();
   if (window.location.hash.toLowerCase() === '#contribute') {
     showPage('contribute');

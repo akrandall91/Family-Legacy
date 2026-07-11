@@ -40,8 +40,17 @@ const FamilyData = {
     family_name: "The Rowe Family",
     tagline: "One root. Many branches.",
     founded: "2024",
-    root_branch_id: "branch_root"
+    root_branch_id: "branch_root", // legacy alias
+    home_branch_id: "branch_root",
+    root_branch_ids: ["branch_root"],
+    default_exploration_mode: "home",
+    show_unlinked_research_branches: true,
+    show_uncertain_relationships: true,
+    show_household_connections_in_tree: false
   },
+
+  unions: [],
+  households: [],
 
   // --------------------------------------------------------
   // BRANCHES

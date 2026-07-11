@@ -45,6 +45,8 @@ const TAB_CONFIG = {
   media: { sheet: 'Media', headers: ['id', 'record_json', 'updated_at'] },
   locations: { sheet: 'Locations', headers: ['id', 'record_json', 'updated_at'] },
   sources: { sheet: 'Sources', headers: ['id', 'record_json', 'updated_at'] }
+  ,unions: { sheet: 'Unions', headers: ['id', 'record_json', 'updated_at'] }
+  ,households: { sheet: 'Households', headers: ['id', 'record_json', 'updated_at'] }
 };
 
 const PENDING_HEADERS = [
@@ -135,7 +137,7 @@ function getSheetOrThrow_(sheetName) {
 
 /** Assembles the full dataset (all record types + settings + pending submissions) as one JSON object. */
 function getAll_() {
-  const dataset = { meta: {}, branches: [], persons: [], events: [], stories: [], media: [], locations: {}, sources: [], settings: {}, pendingSubmissions: [] };
+  const dataset = { meta: {}, branches: [], persons: [], events: [], stories: [], media: [], locations: {}, sources: [], unions: [], households: [], settings: {}, pendingSubmissions: [] };
   Object.keys(TAB_CONFIG).forEach(type => {
     const records = readRecordSheet_(type);
     dataset[type] = type === 'locations'
