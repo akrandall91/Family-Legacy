@@ -247,7 +247,7 @@ function renderEditData() {
       <div id="edit-data-message"></div>
       <div class="editor-controls">
         <select class="legacy-select" onchange="setEditDataType(this.value)">
-          ${['persons','branches','events','stories','media','locations','sources'].map(type =>
+          ${['persons','branches','events','stories','media','locations','sources','unions','households'].map(type =>
             `<option value="${type}" ${editDataType === type ? 'selected' : ''}>${type[0].toUpperCase() + type.slice(1)}</option>`
           ).join('')}
         </select>
@@ -279,12 +279,14 @@ function setEditDataRecord(id) {
 function createStructuredRecord(type) {
   const id = `${type.slice(0, -1)}_${Date.now()}`;
   const defaults = {
-    persons: { id, name: { first: '', middle: '', last: '', maiden: null, nicknames: [], display: 'New Person' }, birth: null, death: null, gender: 'unknown', is_living: true, relationships: { parents: [], spouses: [], children: [] }, branch_ids: [D.meta.root_branch_id], bio: '', cover_media_id: null, tags: [], confidence: 0.5, sources: [], privacy: 'family', status: 'draft' },
+    persons: { id, name: { first: '', middle: '', last: '', maiden: null, nicknames: [], display: 'New Person' }, birth: null, death: null, gender: 'unknown', is_living: true, relationships: { parents: [], spouses: [], children: [] }, branch_ids: [getHomeBranchId()], branch_memberships: [{branch_id:getHomeBranchId(),connection_type:'descent',primary:true,status:'confirmed',source_ids:[]}], primary_branch_id:getHomeBranchId(), bio: '', cover_media_id: null, tags: [], confidence: 0.5, sources: [], privacy: 'family', status: 'draft' },
     branches: { id, name: 'New Branch', root_person_id: '', parent_branch_id: D.meta.root_branch_id, child_branch_ids: [], color: '#a4674d', description: '' },
     events: { id, type: 'other', title: 'New Event', description: '', date: { start: '0000-00-00', display: 'Unknown', certainty: 'unknown', end: null }, recurrence: { type: 'none' }, people: [], branch_ids: [D.meta.root_branch_id], location_id: null, media_ids: [], tags: [], sources: [], privacy: 'family', status: 'draft' },
     stories: { id, type: 'written', title: 'New Story', body: '', people_ids: [], branch_ids: [D.meta.root_branch_id], event_ids: [], era: '', told_by: null, told_date: '', media_id: null, tags: [], status: 'draft', privacy: 'family' },
     media: { id, type: 'photo', title: 'New Media', description: '', storage: { type: 'placeholder', url: null, color: '#a4674d' }, date: { value: '0000-00-00', certainty: 'unknown', display: 'Unknown' }, people_ids: [], event_ids: [], branch_ids: [D.meta.root_branch_id], location_id: null, tags: [], privacy: 'family' },
-    sources: { id, title: 'New Source', type: 'other', date: '', location: null, drive_file_id: '', notes: '', reliability: 0.5 }
+    sources: { id, title: 'New Source', type: 'other', date: '', location: null, drive_file_id: '', notes: '', reliability: 0.5 },
+    unions: {id,partner_ids:[],relationship_type:'unknown',child_ids:[],start_date:null,end_date:null,status:'unknown',current:false,source_ids:[],notes:'',privacy:'family'},
+    households: {id,name:'New Household',adult_ids:[],child_ids:[],member_ids:[],location_id:null,date_start:null,date_end:null,notes:'',source_ids:[],privacy:'family'}
   };
   if (type === 'locations') {
     D.locations[id] = { name: 'New Location', short: 'New Location' };
@@ -323,6 +325,8 @@ function serializeFamilyDataJs() {
     ['MEDIA', 'Photos, videos, and documents.', 'media'],
     ['LOCATIONS', 'Object keyed by location id.', 'locations'],
     ['SOURCES', 'Research and source records.', 'sources'],
+    ['UNIONS', 'Partnerships and their explicitly associated children.', 'unions'],
+    ['HOUSEHOLDS', 'Historical household membership, separate from lineage.', 'households'],
     ['SETTINGS', 'Site-wide configuration.', 'settings']
   ];
   const body = sections.map(([title, description, key], index) => `  // --------------------------------------------------------
@@ -379,6 +383,10 @@ function renderAdmin() {
       <button class="filter-pill ${adminTab === 'pending' ? 'active' : ''}" onclick="setAdminTab('pending')">Pending Submissions</button>
       <button class="filter-pill ${adminTab === 'export' ? 'active' : ''}" onclick="setAdminTab('export')">Export</button>
       <button class="filter-pill ${adminTab === 'duplicates' ? 'active' : ''}" onclick="setAdminTab('duplicates')">Duplicate Detector</button>
+      <button class="filter-pill ${adminTab === 'relationships' ? 'active' : ''}" onclick="setAdminTab('relationships')">Relationships</button>
+      <button class="filter-pill ${adminTab === 'unions' ? 'active' : ''}" onclick="setAdminTab('unions')">Unions</button>
+      <button class="filter-pill ${adminTab === 'households' ? 'active' : ''}" onclick="setAdminTab('households')">Households</button>
+      <button class="filter-pill ${adminTab === 'diagnostics' ? 'active' : ''}" onclick="setAdminTab('diagnostics')">Diagnostics</button>
       ${currentUserRole === 'super_admin' ? `<button class="filter-pill" onclick="showPage('edit-data')">Full Data Editor</button>` : ''}
     </div>
     ${adminTab === 'overview' ? renderAdminOverview() : ''}
@@ -388,6 +396,10 @@ function renderAdmin() {
     ${adminTab === 'pending' ? renderPendingSubmissions() : ''}
     ${adminTab === 'export' ? renderAdminExport() : ''}
     ${adminTab === 'duplicates' ? renderAdminDuplicates() : ''}
+    ${adminTab === 'relationships' ? renderRelationshipManager() : ''}
+    ${adminTab === 'unions' ? renderUnionManager() : ''}
+    ${adminTab === 'households' ? renderHouseholdManager() : ''}
+    ${adminTab === 'diagnostics' ? renderStorageDiagnostics() : ''}
   `;
 }
 

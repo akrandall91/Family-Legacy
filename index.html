@@ -75,6 +75,13 @@
       <div id="tree-filter-buttons" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       <span class="tree-instructions">Click a person to open profile · Drag to pan</span>
     </div>
+    <div class="exploration-control" aria-label="Family exploration direction">
+      <button type="button" onclick="setTreeExploration('ancestors')">Ancestors ↑</button><button type="button" onclick="resetTreeToHome()">Family Home ●</button><button type="button" onclick="setTreeExploration('descendants')">Descendants ↓</button>
+      <label><input type="checkbox" checked onchange="setTreeRelationshipFilter('step',this.checked)"> Step-parents</label>
+      <label><input type="checkbox" onchange="setTreeRelationshipFilter('household',this.checked)"> Households</label>
+      <label><input type="checkbox" checked onchange="setTreeRelationshipFilter('uncertain',this.checked)"> Uncertain</label>
+    </div>
+    <div id="tree-relationship-explanation" class="green-note" aria-live="polite">Select a relationship line for a text explanation.</div>
     <div class="relationship-legend" aria-label="Relationship line legend">
       <span><i class="legend-line solid"></i> Confirmed biological</span><span><i class="legend-line double"></i> Adoptive</span>
       <span><i class="legend-line dashed"></i> Step, guardian, or household</span><span><i class="legend-line dotted"></i> Uncertain or disputed</span>
@@ -411,6 +418,7 @@
 <script src="assets/js/render-people.js"></script>
 <script src="assets/js/render-profile.js"></script>
 <script src="assets/js/render-admin.js"></script>
+<script src="assets/js/phase2-ui.js"></script>
 <script src="assets/js/forms.js"></script>
 <script src="assets/js/app.js"></script>
 </body>

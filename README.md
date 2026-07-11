@@ -108,3 +108,5 @@ See `DATA-ENTRY-GUIDE.md` for how to actually fill in the data file.
 Family Legacy uses one governing rule: children attach to individual parents; couples, unions, households, sibling groups, and branches are derived views. Legacy string references remain supported and normalize in memory without changing the source file. Rich relationships record their type, evidence status, sources, notes, visibility, and effect on branch descent.
 
 The archive supports multiple ancestral roots and unlinked research branches. `home_branch_id` is a presentation anchor, not a claim about the earliest ancestor. Run `node scripts/validate-data.js` before publishing; living-person data in this public repository must remain non-sensitive.
+
+Administrators now have dedicated Relationships, Unions, Households, and Diagnostics workspaces. See [ADMIN-GENEALOGY-GUIDE.md](ADMIN-GENEALOGY-GUIDE.md) for entry, migration, deployment, verification, and rollback instructions. Run `node scripts/test-relationships.js` for the 26-scenario relationship regression suite.

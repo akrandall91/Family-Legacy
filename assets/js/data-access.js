@@ -21,6 +21,8 @@ const getLoc    = id => id && D.locations[id] ? D.locations[id].short : '';
 const FAMILY_API_URL = 'https://script.google.com/macros/s/AKfycbwJX8dOnm2hqfmvBkRlbdwU95oOp4s5xOj6nDlJDPEs58c7a1YHeviEUJvv7m_ZPP6wGw/exec';
 let centralDataAvailable = false;
 let syncStatusTimer = null;
+let lastSuccessfulCentralLoad = null;
+let lastSuccessfulCentralSave = null;
 
 function showSyncStatus(message, status = '') {
   const banner = document.getElementById('sync-status-banner');
@@ -56,6 +58,7 @@ async function loadCentralFamilyData() {
     D = result;
     D.pendingSubmissions = result.pendingSubmissions || [];
     centralDataAvailable = true;
+    lastSuccessfulCentralLoad = new Date().toISOString();
     showSyncStatus('Connected to the shared family archive.', 'success');
   } catch (error) {
     D = structuredClone(FamilyData);
@@ -71,6 +74,7 @@ async function reloadCentralData() {
   D = result;
   D.pendingSubmissions = result.pendingSubmissions || [];
   centralDataAvailable = true;
+  lastSuccessfulCentralLoad = new Date().toISOString();
   rebuildFamilyIndexes();
   refreshAllDerivedViews();
   return D;
@@ -83,6 +87,7 @@ async function persistRecord(type, record) {
   }
   try {
     await familyApi('saveRecord', { recordType: type, record });
+    lastSuccessfulCentralSave = new Date().toISOString();
     showSyncStatus('Saved to the shared family archive.', 'success');
     return true;
   } catch (error) {

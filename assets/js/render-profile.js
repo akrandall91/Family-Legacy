@@ -30,7 +30,7 @@ function renderPersonPage() {
   if (!root) return;
 
   const person = getPerson(currentPersonId);
-  if (!person) {
+  if (!person || (!currentUserRole && !isPublicRecord(person))) {
     root.innerHTML = '<div class="empty-state">Person not found.</div>';
     return;
   }

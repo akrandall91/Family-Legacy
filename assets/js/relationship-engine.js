@@ -8,14 +8,15 @@ let familyIndexes = {};
 
 function normalizeParentRelationship(value, defaults = {}) {
   const input = typeof value === 'string' ? { person_id: value } : (value || {});
-  return { person_id: input.person_id || input.id || '', relationship_type: input.relationship_type || defaults.relationship_type || 'biological', status: input.status || defaults.status || 'confirmed', source_ids: [...(input.source_ids || [])], notes: input.notes || '', public: input.public !== false, establishes_branch_descent: input.establishes_branch_descent !== false };
+  const type = input.relationship_type || defaults.relationship_type || 'biological';
+  return { person_id: input.person_id || input.id || '', relationship_type: type, status: input.status || defaults.status || 'confirmed', confidence: Number.isFinite(Number(input.confidence)) ? Number(input.confidence) : 1, source_ids: [...(input.source_ids || [])], notes: input.notes || '', privacy: input.privacy || 'family', public: input.public !== false, establishes_branch_descent: type === 'step' ? false : input.establishes_branch_descent !== false, show_in_tree: input.show_in_tree !== false, under_research: !!input.under_research };
 }
 function normalizeParentRelationships(person) { return (person?.relationships?.parents || []).map(normalizeParentRelationship).filter(r => r.person_id); }
-function normalizeChildRelationship(value, defaults = {}) { return normalizeParentRelationship(value, defaults); }
+function normalizeChildRelationship(value, defaults = {}) { const r=normalizeParentRelationship(value, defaults); const input=typeof value==='object'&&value?value:{}; return {...r,union_id:input.union_id || null,connection_kind:input.connection_kind || 'genealogical'}; }
 function normalizeChildRelationships(person) { return (person?.relationships?.children || []).map(normalizeChildRelationship).filter(r => r.person_id); }
 function normalizeSpouseRelationship(value) {
   const input = typeof value === 'string' ? { person_id: value } : (value || {});
-  return { person_id: input.person_id || '', relationship_id: input.relationship_id || null, relationship_type: input.relationship_type || 'marriage', status: input.status || 'confirmed', start_date: input.start_date || null, end_date: input.end_date || null, source_ids: [...(input.source_ids || [])], notes: input.notes || '', public: input.public !== false };
+  return { person_id: input.person_id || '', relationship_id: input.relationship_id || null, relationship_type: input.relationship_type || 'marriage', status: input.status || 'confirmed', current: input.current ?? !input.end_date, start_date: input.start_date || null, end_date: input.end_date || null, union_id: input.union_id || null, source_ids: [...(input.source_ids || [])], notes: input.notes || '', privacy: input.privacy || 'family', public: input.public !== false };
 }
 function normalizeBranchRelationship(value) {
   const input = typeof value === 'string' ? { branch_id: value } : (value || {});
@@ -61,3 +62,13 @@ function getStepSiblings(id){return getSiblingsByType(id,'step');} function getA
 function getHomeBranchId(){ return D.meta?.home_branch_id || D.meta?.root_branch_id || D.branches?.[0]?.id || null; }
 function getRootBranchIds(){ return D.meta?.root_branch_ids?.length ? [...D.meta.root_branch_ids] : [D.meta?.root_branch_id || getHomeBranchId()].filter(Boolean); }
 function getPrimaryBranchId(person){ return person?.primary_branch_id || person?.branch_memberships?.find(m=>m.primary)?.branch_id || person?.branch_ids?.[0] || getHomeBranchId(); }
+
+function getChildRelationships(personOrId, options={}) { const person=typeof personOrId==='string'?getPerson(personOrId):personOrId; return (ensureFamilyIndexes().childrenByParentId.get(person?.id) || []).filter(r=>(options.includePrivate || r.public) && (!options.types || options.types.includes(r.relationship_type))); }
+function getUnionsForPerson(id){ return ensureFamilyIndexes().unionsByPersonId.get(id) || []; }
+function getHouseholdsForPerson(id){ return (D.households || []).filter(h=>[...(h.adult_ids||[]),...(h.child_ids||[]),...(h.member_ids||[])].includes(id)); }
+function isPublicRecord(record){ return !record || !['private','admin'].includes(record.privacy); }
+function getBranchMemberships(person){ return ensureFamilyIndexes().branchMembershipsByPersonId.get(person.id) || []; }
+function getBranchPeopleByConnection(branchId, allowed=['descent']) { return (D.persons || []).filter(p=>getBranchMemberships(p).some(m=>m.branch_id===branchId && allowed.includes(m.connection_type) && isPublicRecord(m))); }
+function getDirectDescendantIds(branchId){ return new Set(getBranchPeopleByConnection(branchId,['descent','adoption']).map(p=>p.id)); }
+function wouldCreateParentCycle(parentId, childId){ const seen=new Set(); const visit=id=>{if(id===parentId)return true;if(seen.has(id))return false;seen.add(id);return getChildRelationships(id,{includePrivate:true}).some(r=>visit(r.person_id));}; return visit(childId); }
+function validateRelationshipChange(ownerId, relationship, role='parent') { const issues=[]; if(!relationship.person_id)issues.push('Select a person.'); if(ownerId===relationship.person_id)issues.push(`A person cannot be their own ${role}.`); if(!PARENT_TYPES.has(relationship.relationship_type))issues.push('Choose a valid relationship type.'); if(!EVIDENCE_STATUSES.has(relationship.status))issues.push('Choose a valid evidence status.'); if(relationship.relationship_type==='step'&&relationship.establishes_branch_descent)issues.push('A step-parent relationship cannot establish biological descent.'); (relationship.source_ids||[]).forEach(id=>{if(!(D.sources||[]).some(s=>s.id===id))issues.push(`Source ${id} does not exist.`);}); if(role==='parent'&&relationship.person_id&&wouldCreateParentCycle(relationship.person_id,ownerId))issues.push('This change would create a parent-child cycle.'); return issues; }

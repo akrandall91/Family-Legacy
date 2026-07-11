@@ -11,6 +11,12 @@ let treeDragStartX = 0;
 let treeDragStartY = 0;
 let treeViewX = 0;
 let treeViewY = 0;
+let treeExplorationMode = 'home';
+const treeRelationshipFilters = { step:true, household:false, uncertain:true };
+function setTreeExploration(mode){treeExplorationMode=mode;treeRendered=false;renderTree();treeRendered=true;}
+function resetTreeToHome(){treeFilterBranch=getHomeBranchId();setTreeExploration('home');}
+function setTreeRelationshipFilter(type,enabled){treeRelationshipFilters[type]=enabled;treeRendered=false;renderTree();treeRendered=true;}
+function explainTreeRelationship(text){const el=document.getElementById('tree-relationship-explanation');if(el)el.textContent=text;}
 
 function filterTree(branch, btn) {
   treeFilterBranch = branch;
@@ -23,7 +29,7 @@ function filterTree(branch, btn) {
 }
 
 function findFamilyGroups(dataset) {
-  const persons = dataset.persons || [];
+  const persons = (dataset.persons || []).filter(isPublicRecord);
   const personIds = new Set(persons.map(p => p.id));
   const adjacency = {};
 
@@ -306,10 +312,13 @@ function renderTree() {
     const parentNode = nodeMap[p.id];
     if (!parentNode) return;
     (ensureFamilyIndexes().childrenByParentId.get(p.id) || []).forEach(relationship => {
+      if (!treeRelationshipFilters.step && ['step','guardian','foster','social-parent'].includes(relationship.relationship_type)) return;
+      if (!treeRelationshipFilters.uncertain && relationship.status !== 'confirmed') return;
       const childNode = nodeMap[relationship.person_id];
       if (!childNode) return;
       const x1 = parentNode.x, y1 = parentNode.y + CARD_H/2;
       const x2 = childNode.x, y2 = childNode.y - CARD_H/2;
+      const explanation = `${relationship.status} ${relationship.relationship_type} parent relationship: ${p.name.display} to ${childNode.person.name.display}`;
       edgeGroup.append('path')
         .attr('d', `M${x1},${y1} C${x1},${(y1+y2)/2} ${x2},${(y1+y2)/2} ${x2},${y2}`)
         .attr('fill', 'none')
@@ -317,6 +326,8 @@ function renderTree() {
         .attr('stroke-width', relationship.relationship_type === 'adoptive' ? 3 : 1.5)
         .attr('stroke-dasharray', ['step','guardian','foster','social-parent'].includes(relationship.relationship_type) ? '7,5' : (relationship.status === 'confirmed' ? null : '2,5'))
         .attr('aria-label', `${p.name.display} is ${relationship.status} ${relationship.relationship_type} parent of ${childNode.person.name.display}`)
+        .attr('tabindex', 0).attr('role','button')
+        .on('click',()=>explainTreeRelationship(explanation)).on('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();explainTreeRelationship(explanation);}})
         .append('title').text(`${relationship.relationship_type} parent relationship (${relationship.status})`);
     });
 

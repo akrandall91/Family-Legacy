@@ -56,6 +56,15 @@ const PENDING_HEADERS = [
 ];
 
 const VALID_SUBMISSION_TYPES = ['person', 'note', 'event', 'story'];
+const SCHEMA_VERSION = 2;
+const NORMALIZED_TABS = {
+  ParentRelationships:['id','child_id','parent_id','relationship_type','status','confidence','source_ids_json','notes','privacy','creates_descent','show_in_tree'],
+  PartnerRelationships:['id','person_id','partner_id','union_id','relationship_type','status','start_date','end_date','source_ids_json','notes','privacy'],
+  UnionChildren:['id','union_id','child_id'],
+  HouseholdMembers:['id','household_id','person_id','member_role'],
+  BranchConnections:['id','branch_id','connected_branch_id','relationship_type','status','through_person_id','source_ids_json','notes'],
+  BranchMemberships:['id','person_id','branch_id','connection_type','primary','status','through_person_id','source_ids_json']
+};
 
 // ------------------------------------------------------------
 // Web app entry points
@@ -72,6 +81,7 @@ function doGet(e) {
     ensureWorkbook_();
     if (action === 'ping') return json_({ ok: true, status: 'Family Legacy API is running' });
     if (action === 'getall') return json_(getAll_());
+    if (action === 'diagnostics') return json_(diagnostics_());
     return json_({ ok: true, status: 'Family Legacy API is running', note: 'Unknown action, returning health check.' });
   } catch (error) {
     return json_({ ok: false, error: error.message });
@@ -94,6 +104,9 @@ function doPost(e) {
     if (action === 'approvesubmission') return json_(reviewSubmission_(body.id, true));
     if (action === 'rejectsubmission') return json_(reviewSubmission_(body.id, false));
     if (action === 'seedfrominitialdata') return json_(seedFromInitialData_(body.dataset, body.force === true));
+    if (action === 'previewrelationshipmigration') return json_(migrateRelationships_(true));
+    if (action === 'runrelationshipmigration') return json_(migrateRelationships_(false));
+    if (action === 'verifyrelationshipmigration') return json_(verifyRelationshipMigration_());
     throw new Error('Unknown action: ' + action);
   } catch (error) {
     return json_({ ok: false, error: error.message });
@@ -115,7 +128,42 @@ function ensureWorkbook_() {
   Object.keys(TAB_CONFIG).forEach(type => ensureSheet_(ss, TAB_CONFIG[type].sheet, TAB_CONFIG[type].headers));
   ensureSheet_(ss, 'PendingSubmissions', PENDING_HEADERS);
   ensureSheet_(ss, 'Settings', ['key', 'value_json', 'updated_at']);
+  Object.keys(NORMALIZED_TABS).forEach(name => ensureSheet_(ss, name, NORMALIZED_TABS[name]));
 }
+
+function diagnostics_() {
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  const expected=Object.keys(TAB_CONFIG).map(k=>TAB_CONFIG[k].sheet).concat(Object.keys(NORMALIZED_TABS),['PendingSubmissions','Settings']);
+  const missing=expected.filter(name=>!ss.getSheetByName(name));
+  const totals={}; Object.keys(TAB_CONFIG).forEach(type=>totals[type]=readRecordSheet_(type).length);
+  const migration=verifyRelationshipMigration_();
+  return {ok:true,schemaVersion:SCHEMA_VERSION,missingSheets:missing,totals:totals,migrationRequired:migration.missingCount>0,schemaMismatches:migration.schemaMismatches};
+}
+
+function migrationRows_() {
+  const data=getAll_(), rows={}; Object.keys(NORMALIZED_TABS).forEach(name=>rows[name]=[]);
+  const seen={}; Object.keys(rows).forEach(name=>seen[name]=new Set());
+  function add(tab,id,row){if(seen[tab].has(id))return;seen[tab].add(id);rows[tab].push([id].concat(row));}
+  (data.persons||[]).forEach(person=>{
+    ((person.relationships||{}).parents||[]).forEach(value=>{const r=typeof value==='string'?{person_id:value,relationship_type:'biological',status:'confirmed'}:value;const id='parent_'+person.id+'_'+r.person_id+'_'+(r.relationship_type||'biological');add('ParentRelationships',id,[person.id,r.person_id,r.relationship_type||'biological',r.status||'confirmed',r.confidence==null?1:r.confidence,JSON.stringify(r.source_ids||[]),r.notes||'',r.privacy||'family',r.relationship_type==='step'?false:r.establishes_branch_descent!==false,r.show_in_tree!==false]);});
+    ((person.relationships||{}).spouses||[]).forEach(r=>{r=typeof r==='string'?{person_id:r}:r;const pair=[person.id,r.person_id].sort();const id='partner_'+pair.join('_')+'_'+(r.relationship_id||r.union_id||'legacy');add('PartnerRelationships',id,[person.id,r.person_id,r.union_id||'',r.relationship_type||'marriage',r.status||'confirmed',r.start_date||'',r.end_date||'',JSON.stringify(r.source_ids||[]),r.notes||'',r.privacy||'family']);});
+    const memberships=person.branch_memberships||(person.branch_ids||[]).map((branch_id,i)=>({branch_id:branch_id,connection_type:'descent',primary:(person.primary_branch_id||person.branch_ids[0])===branch_id,status:'confirmed'}));memberships.forEach(m=>add('BranchMemberships','membership_'+person.id+'_'+m.branch_id+'_'+(m.connection_type||'descent'),[person.id,m.branch_id,m.connection_type||'descent',!!m.primary,m.status||'confirmed',m.through_person_id||'',JSON.stringify(m.source_ids||[])]));
+  });
+  (data.unions||[]).forEach(u=>(u.child_ids||[]).forEach(id=>add('UnionChildren','unionchild_'+u.id+'_'+id,[u.id,id])));
+  (data.households||[]).forEach(h=>{(h.adult_ids||[]).forEach(id=>add('HouseholdMembers','household_'+h.id+'_'+id,[h.id,id,'adult']));(h.child_ids||[]).forEach(id=>add('HouseholdMembers','household_'+h.id+'_'+id,[h.id,id,'child']));(h.member_ids||[]).forEach(id=>add('HouseholdMembers','household_'+h.id+'_'+id,[h.id,id,'member']));});
+  (data.branches||[]).forEach(b=>(b.connected_branches||[]).forEach(c=>add('BranchConnections','branchconnection_'+b.id+'_'+c.branch_id+'_'+(c.relationship||'unknown-connection'),[b.id,c.branch_id,c.relationship||'unknown-connection',c.status||'confirmed',c.through_person_id||'',JSON.stringify(c.source_ids||[]),c.notes||''])));
+  return rows;
+}
+function migrateRelationships_(dryRun) {
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),rows=migrationRows_(),report={ok:true,dryRun:dryRun,recordsToCreate:0,alreadyMigrated:0,ambiguous:0,conflicting:0,missingReferences:0,noOp:0,bySheet:{},backupSheet:null};
+  if(!dryRun){const backup='MigrationBackup_'+Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyyMMdd_HHmmss');const sheet=ss.insertSheet(backup);sheet.appendRow(['created_at','dataset_json']);sheet.appendRow([new Date().toISOString(),JSON.stringify(getAll_())]);report.backupSheet=backup;}
+  Object.keys(rows).forEach(name=>{const sheet=getSheetOrThrow_(name),values=sheet.getDataRange().getValues(),existing=new Set(values.slice(1).map(r=>String(r[0]))),create=rows[name].filter(r=>!existing.has(String(r[0])));report.recordsToCreate+=create.length;report.alreadyMigrated+=rows[name].length-create.length;report.bySheet[name]={create:create.length,existing:rows[name].length-create.length};if(!dryRun&&create.length)sheet.getRange(sheet.getLastRow()+1,1,create.length,create[0].length).setValues(create);});
+  report.noOp=report.recordsToCreate===0?1:0;return report;
+}
+function verifyRelationshipMigration_(){const rows=migrationRows_(),result={ok:true,missingCount:0,schemaMismatches:[],bySheet:{}};Object.keys(rows).forEach(name=>{const sheet=getSheetOrThrow_(name),values=sheet.getDataRange().getValues(),headers=values[0]||[],expected=NORMALIZED_TABS[name];if(expected.some((h,i)=>headers[i]!==h))result.schemaMismatches.push(name);const ids=new Set(values.slice(1).map(r=>String(r[0]))),missing=rows[name].filter(r=>!ids.has(String(r[0]))).length;result.bySheet[name]={expected:rows[name].length,missing:missing};result.missingCount+=missing;});result.ok=result.missingCount===0&&!result.schemaMismatches.length;return result;}
+function previewRelationshipMigration(){ensureWorkbook_();return migrateRelationships_(true);}
+function runRelationshipMigration(){ensureWorkbook_();return migrateRelationships_(false);}
+function verifyRelationshipMigration(){ensureWorkbook_();return verifyRelationshipMigration_();}
 
 function ensureSheet_(ss, name, headers) {
   let sheet = ss.getSheetByName(name);

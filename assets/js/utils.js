@@ -86,7 +86,7 @@ function parseLooseDateToStart(value) {
 }
 
 function getBranchPeople(branchId) {
-  return D.persons.filter(person => (person.branch_ids || []).includes(branchId));
+  return D.persons.filter(person => isPublicRecord(person) && getBranchMemberships(person).some(m => m.branch_id === branchId && isPublicRecord(m)));
 }
 
 function getBranchEvents(branchId) {

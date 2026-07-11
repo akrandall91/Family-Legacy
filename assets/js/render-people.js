@@ -87,6 +87,8 @@ function renderStories() {
 // ============================================================
 // BRANCHES
 // ============================================================
+const branchConnectionFilters = { descendantBranches:true, marriage:false, adoption:true, stepfamily:false, household:false, uncertain:true };
+function setBranchConnectionFilter(key,value){branchConnectionFilters[key]=value;renderBranches();}
 function renderBranches() {
   const container = document.getElementById('branches-content');
   if (!container) return;
@@ -99,7 +101,11 @@ function renderBranches() {
       return;
     }
 
-    const branchPeople = getBranchPeople(branch.id);
+    const memberships=(D.persons||[]).flatMap(person=>getBranchMemberships(person).filter(m=>m.branch_id===branch.id).map(m=>({person,m})));
+    const directPeople=[...new Map(memberships.filter(x=>x.m.connection_type==='descent').map(x=>[x.person.id,x.person])).values()];
+    const adoptivePeople=[...new Map(memberships.filter(x=>x.m.connection_type==='adoption').map(x=>[x.person.id,x.person])).values()];
+    const connectedPeople=[...new Map(memberships.filter(x=>!['descent','adoption'].includes(x.m.connection_type) && (branchConnectionFilters.uncertain || x.m.status==='confirmed')).map(x=>[x.person.id,x.person])).values()];
+    const branchPeople=[...new Map([...directPeople,...(branchConnectionFilters.adoption?adoptivePeople:[]),...connectedPeople.filter(p=>{const m=memberships.find(x=>x.person.id===p.id)?.m;return (m.connection_type==='marriage'&&branchConnectionFilters.marriage)||(m.connection_type==='stepfamily'&&branchConnectionFilters.stepfamily)||(m.connection_type==='household'&&branchConnectionFilters.household)||m.connection_type==='research';})].map(p=>[p.id,p])).values()];
     const branchEvents = [...getBranchEvents(branch.id)].sort((a, b) => {
       const ad = (a.date?.start || '9999-99-99').replace(/-00/g, '-01');
       const bd = (b.date?.start || '9999-99-99').replace(/-00/g, '-01');
@@ -115,10 +121,11 @@ function renderBranches() {
         <div class="branch-detail-era">${escapeHtml(branch.era_start || 'Era not recorded')}</div>
         <div class="branch-detail-desc">${escapeHtml(branch.description || 'No description yet.')}</div>
         <div class="branch-stat-row">
-          <div class="branch-stat-chip">
-            <div class="branch-stat-value">${branchPeople.length}</div>
-            <div class="branch-stat-label">People</div>
-          </div>
+          <div class="branch-stat-chip"><div class="branch-stat-value">${directPeople.length}</div><div class="branch-stat-label">Direct descendants</div></div>
+          <div class="branch-stat-chip"><div class="branch-stat-value">${new Set([...directPeople,...adoptivePeople].map(p=>p.id)).size}</div><div class="branch-stat-label">Total descendants</div></div>
+          <div class="branch-stat-chip"><div class="branch-stat-value">${connectedPeople.length}</div><div class="branch-stat-label">Connected relatives</div></div>
+          <div class="branch-stat-chip"><div class="branch-stat-value">${(D.unions||[]).filter(u=>(u.partner_ids||[]).some(id=>branchPeople.some(p=>p.id===id))).length}</div><div class="branch-stat-label">Unions</div></div>
+          <div class="branch-stat-chip"><div class="branch-stat-value">${(D.households||[]).filter(h=>[...(h.adult_ids||[]),...(h.child_ids||[]),...(h.member_ids||[])].some(id=>branchPeople.some(p=>p.id===id))).length}</div><div class="branch-stat-label">Households</div></div>
           <div class="branch-stat-chip">
             <div class="branch-stat-value">${branchEvents.length}</div>
             <div class="branch-stat-label">Events</div>
@@ -132,6 +139,7 @@ function renderBranches() {
             <div class="branch-stat-label">Root Ancestor</div>
           </div>
         </div>
+        <div class="exploration-control" aria-label="Branch connection filters"><label><input type="checkbox" ${branchConnectionFilters.adoption?'checked':''} onchange="setBranchConnectionFilter('adoption',this.checked)"> Adoption</label><label><input type="checkbox" ${branchConnectionFilters.marriage?'checked':''} onchange="setBranchConnectionFilter('marriage',this.checked)"> Marriage</label><label><input type="checkbox" ${branchConnectionFilters.stepfamily?'checked':''} onchange="setBranchConnectionFilter('stepfamily',this.checked)"> Step-family</label><label><input type="checkbox" ${branchConnectionFilters.household?'checked':''} onchange="setBranchConnectionFilter('household',this.checked)"> Household</label><label><input type="checkbox" ${branchConnectionFilters.uncertain?'checked':''} onchange="setBranchConnectionFilter('uncertain',this.checked)"> Uncertain</label></div>
 
         <div class="mini-section-title">People in This Branch</div>
         ${branchPeople.length ? `

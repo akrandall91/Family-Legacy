@@ -83,4 +83,6 @@ privacy requires authenticated users and server-side authorization.
 
 The workbook keeps one lossless `record_json` cell per record. Two additional tabs, `Unions` and `Households`, store optional records using the same `id | record_json | updated_at` layout. Rich parent, partner, evidence, branch-membership, source, privacy, and connection objects remain inside each record JSON, so legacy string arrays are never discarded during sync. This is the safest backward-compatible strategy for the existing deployed workbook; a future reporting workbook may project these objects into normalized relationship tabs.
 
+Schema version 2 adds idempotent normalized projections: `ParentRelationships`, `PartnerRelationships`, `UnionChildren`, `HouseholdMembers`, `BranchConnections`, and `BranchMemberships`. JSON tabs remain authoritative and are never deleted by migration. Use `previewRelationshipMigration()`, `runRelationshipMigration()`, and `verifyRelationshipMigration()` as documented in `ADMIN-GENEALOGY-GUIDE.md`.
+
 Children attach to individual people in `person.relationships.parents`. A union's `child_ids` contains only children explicitly associated with that union and never grants parent status. `meta.home_branch_id` is the landing anchor; `meta.root_branch_ids` contains zero or more earliest-known lines.
