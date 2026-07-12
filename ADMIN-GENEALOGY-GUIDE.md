@@ -9,12 +9,14 @@ To add a former spouse, create a union using `former-marriage` or `former-partne
 ## Apps Script deployment and migration
 
 1. Open the spreadsheet's Apps Script project and replace `Code.gs` with [apps-script/Code.gs](apps-script/Code.gs).
-2. Save, then run `previewRelationshipMigration()` in the editor. Review create, existing, ambiguous, conflicting, and missing-reference totals.
-3. Run `runRelationshipMigration()`. It creates a timestamped `MigrationBackup_*` sheet before writing and uses deterministic IDs, so reruns do not duplicate rows.
-4. Run `verifyRelationshipMigration()` and require `missingCount: 0` with no schema mismatches.
+2. Save, then run `previewFlatSheetMigration()` and review create, existing, unmapped, and conflict totals.
+3. Run `runFlatSheetMigration()`. It creates a timestamped `FlatBackup_*` sheet and uses deterministic IDs, so reruns do not duplicate rows.
+4. Run `verifyFlatSheetMigration()` and `validateWorkbook()`. Both must return `ok: true`.
 5. Deploy a new Web App version using the existing `/exec` access settings. Do not change the frontend endpoint until the new deployment responds successfully.
 6. In Admin → Diagnostics, run Test connection and then Test temporary save. The latter creates and removes an admin-only diagnostics source; it does not touch genealogy.
 
-Rollback is non-destructive: the original JSON tabs and legacy relationship fields are retained. If needed, restore records from the timestamped backup sheet and clear only the new normalized projection rows after preserving a workbook copy.
+Rollback is non-destructive: call `rollbackFlatSheetMigration("FlatBackup_...")`. Original JSON tabs remain read-only transition backups, not editing surfaces or runtime sources.
+
+The workbook contains Instructions and Data Dictionary tabs. Entity sheets use visible fields; repeating values use dedicated link sheets. Header rows are frozen and filtered, ID columns are warning-protected, and sheet categories are color-coded. Run `validateWorkbook()` after direct edits.
 
 This static application has no real access control. Never enter exact living-person birth dates, addresses, contact details, medical/legal data, or private disputed evidence. `private` and `admin` records are excluded from public rich relationship views, but sensitive data should not be placed in a public repository at all.

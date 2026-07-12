@@ -110,3 +110,5 @@ Family Legacy uses one governing rule: children attach to individual parents; co
 The archive supports multiple ancestral roots and unlinked research branches. `home_branch_id` is a presentation anchor, not a claim about the earliest ancestor. Run `node scripts/validate-data.js` before publishing; living-person data in this public repository must remain non-sensitive.
 
 Administrators now have dedicated Relationships, Unions, Households, and Diagnostics workspaces. See [ADMIN-GENEALOGY-GUIDE.md](ADMIN-GENEALOGY-GUIDE.md) for entry, migration, deployment, verification, and rollback instructions. Run `node scripts/test-relationships.js` for the 26-scenario relationship regression suite.
+
+Google Sheets schema v4 is flat and human-editable: operational entity fields use visible columns, while repeating and many-to-many values use normalized link sheets. JSON is generated output or backup only. The browser blocks central administrative writes unless diagnostics report `flat-normalized-authoritative` schema 4.

@@ -23,6 +23,8 @@ let centralDataAvailable = false;
 let syncStatusTimer = null;
 let lastSuccessfulCentralLoad = null;
 let lastSuccessfulCentralSave = null;
+const REQUIRED_STORAGE_MODE = 'flat-normalized-authoritative';
+const REQUIRED_SCHEMA_VERSION = 4;
 
 function showSyncStatus(message, status = '') {
   const banner = document.getElementById('sync-status-banner');
@@ -55,6 +57,7 @@ async function loadCentralFamilyData() {
     if (!result.initialized || !Array.isArray(result.persons) || !result.meta?.family_name) {
       throw new Error('Google Sheet is not initialized with family data');
     }
+    if (result.storage_mode !== REQUIRED_STORAGE_MODE || Number(result.schema_version) < REQUIRED_SCHEMA_VERSION) throw new Error('The Google Sheet requires the flat schema v4 migration');
     D = result;
     D.pendingSubmissions = result.pendingSubmissions || [];
     centralDataAvailable = true;
@@ -71,6 +74,7 @@ async function loadCentralFamilyData() {
 async function reloadCentralData() {
   const result = await familyApi('getAll');
   if (!result.initialized || !Array.isArray(result.persons)) throw new Error('Shared archive is not initialized');
+  if (result.storage_mode !== REQUIRED_STORAGE_MODE || Number(result.schema_version) < REQUIRED_SCHEMA_VERSION) throw new Error('Shared archive is not using flat-normalized-authoritative schema v4');
   D = result;
   D.pendingSubmissions = result.pendingSubmissions || [];
   centralDataAvailable = true;
@@ -86,7 +90,9 @@ async function persistRecord(type, record) {
     return false;
   }
   try {
-    await familyApi('saveRecord', { recordType: type, record });
+    const action = type === 'persons' ? 'savePersonProfile' : type === 'branches' ? 'saveBranch' : type === 'unions' ? 'saveUnion' : type === 'households' ? 'saveHousehold' : 'saveRecord';
+    await familyApi(action, action === 'saveRecord' ? { recordType: type, record } : { record });
+    if (type === 'persons') await familyApi('replacePersonProfileLinks', { record });
     lastSuccessfulCentralSave = new Date().toISOString();
     showSyncStatus('Saved to the shared family archive.', 'success');
     return true;
@@ -94,6 +100,19 @@ async function persistRecord(type, record) {
     showSyncStatus('Save failed — check your connection before leaving this page.', 'error');
     return false;
   }
+}
+
+async function persistAuthoritative(action, recordOrId) {
+  if (!centralDataAvailable) { showSyncStatus('Changed locally only — deploy and migrate schema v4 for shared saves.', 'error'); return false; }
+  try {
+    const payload = typeof recordOrId === 'string' ? { id: recordOrId } : { record: recordOrId };
+    const result = await familyApi(action, payload);
+    if (result.storage_mode && result.storage_mode !== REQUIRED_STORAGE_MODE) throw new Error('Backend is not flat-normalized-authoritative');
+    await reloadCentralData();
+    lastSuccessfulCentralSave = new Date().toISOString();
+    showSyncStatus('Saved to authoritative spreadsheet rows and verified after reload.', 'success');
+    return true;
+  } catch (error) { showSyncStatus(`Authoritative save failed: ${error.message}`, 'error'); return false; }
 }
 
 async function persistDelete(type, id) {
